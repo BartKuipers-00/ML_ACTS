@@ -40,3 +40,7 @@ codegen/src/codegen.egg-info/
 !.clang-tidy
 !.oclint
 !.devcontainer
+
+# allow config JSONs
+!Examples/Configs/*.json
+!Examples/Configs/**/*.json
