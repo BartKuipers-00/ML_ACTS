@@ -1,0 +1,10 @@
+target_sources(
+    ActsCore
+    PRIVATE
+        NavigationStream.cpp
+        TryAllNavigationPolicy.cpp
+        SurfaceArrayNavigationPolicy.cpp
+        CylinderNavigationPolicy.cpp
+        MultiLayerNavigationPolicy.cpp
+        MultiNavigationPolicy.cpp
+)

@@ -1,0 +1,68 @@
+'Infrastructure':
+  - changed-files:
+    - any-glob-to-any-file:
+      - .github/**
+      - CI/**
+      - cmake/**
+'Component - Core':
+  - changed-files:
+    - any-glob-to-any-file:
+      - Core/**
+      - Tests/UnitTests/Core/**
+'Component - Examples':
+  - changed-files:
+    - any-glob-to-any-file:
+      - Examples/**
+      - Tests/UnitTests/Examples/**
+'Component - Fatras':
+  - changed-files:
+    - any-glob-to-any-file:
+      - Fatras/**
+      - Tests/UnitTests/Fatras/**
+'Component - Plugins':
+  - changed-files:
+    - any-glob-to-any-file:
+      - Plugins/**
+      - Tests/UnitTests/Plugins/**
+'Component - Documentation':
+  - changed-files:
+    - any-glob-to-any-file:
+      - docs/**
+      - '**/*.rst'
+'Changes Performance':
+  - changed-files:
+    - any-glob-to-any-file:
+      - CI/physmon/reference/**
+      - Examples/Python/tests/root_file_hashes.txt
+'Event Data Model':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*EventData*/**'
+'Clustering':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*Clusterization*/**'
+'SP formation':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*SpacePointFormation*/**'
+'Seeding':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*Seeding*/**'
+'Track Finding':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*TrackFinding*/**'
+'Track Fitting':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*TrackFitting*/**'
+'Vertexing':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*Vertexing*/**'
+'Ambiguity Resolution':
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*AmbiguityResolution*/**'
