@@ -1,0 +1,179 @@
+{
+    "acts-geometry-hierarchy-map": {
+        "format-version": 0,
+        "value-identifier": "digitization-configuration"
+    },
+    "entries": [
+        {
+            "volume": 7,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 8,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 9,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 12,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 13,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 14,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 16,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 17,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        },
+        {
+            "volume": 18,
+            "value": {
+                "smearing": [
+                    {
+                        "index": 0,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    },
+                    {
+                        "index": 1,
+                        "mean": 0.0,
+                        "stddev": 1e-6,
+                        "type": "Exact"
+                    }
+                ]
+            }
+        }
+    ]
+}

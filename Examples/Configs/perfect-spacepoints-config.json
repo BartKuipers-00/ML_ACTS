@@ -1,0 +1,146 @@
+{
+  "simulation": {
+    "events": 200,
+    "numThreads": -1,
+    "randomSeed": 42,
+    "particleGun": {
+      "momentum": {
+        "min": 0.05,
+        "max": 4.0,
+        "transverse": true
+      },
+      "eta": {
+        "min": -2.0,
+        "max": 2.0,
+        "uniform": true
+      },
+      "phi": {
+        "min": 0.0,
+        "max": 360.0
+      },
+      "particles": {
+        "type": "electron",
+        "count": 1,
+        "randomizeCharge": true
+      },
+      "multiplicity": 100
+    }
+  },
+  "detector": {
+    "field": {
+      "strength": 3.0,
+      "direction": [0, 0, 1]
+    },
+    "geometry": {
+      "seedingConfig": "generic-seeding-config.json"
+    }
+  },
+  "simulation_physics": {
+    "enableInteractions": false
+  },
+  "particleSelection": {
+    "pt": {
+      "min": 0.2,
+      "max": null
+    },
+    "measurements": {
+      "min": 9,
+      "max": null
+    },
+    "removeNeutral": true
+  },
+  "seeding": {
+    "truthSmearedSeeded": false,
+    "truthEstimatedSeeded": false,
+    "smearing": {
+      "loc0": 0.0,
+      "loc0PtA": 0.0,
+      "loc0PtB": 0.0,
+      "loc1": 0.0,
+      "loc1PtA": 0.0,
+      "loc1PtB": 0.0,
+      "time": 0.0,
+      "phi": 0.0,
+      "theta": 0.0,
+      "ptRel": 0.0
+    },
+    "finderConfig": {
+      "r": {
+        "min": null,
+        "max": 200.0
+      },
+      "deltaR": {
+        "min": 1.0,
+        "max": 300.0
+      },
+      "collisionRegion": {
+        "min": -250.0,
+        "max": 250.0
+      },
+      "z": {
+        "min": -2000.0,
+        "max": 2000.0
+      },
+      "maxSeedsPerSpM": 1,
+      "sigmaScattering": 5.0,
+      "radLengthPerSeed": 0.1,
+      "minPt": 500.0,
+      "impactMax": 3.0
+    },
+    "finderOptions": {
+      "bFieldInZ": 2.0,
+      "beamPos": [0.0, 0.0]
+    },
+    "truthEstimated": {
+      "deltaR": {
+        "min": 10.0,
+        "max": null
+      }
+    },
+    "initialSigmas": {
+      "loc0": 1.0,
+      "loc1": 1.0,
+      "phi": 1.0,
+      "theta": 1.0,
+      "qop": 0.0,
+      "time": 1.0
+    },
+    "initialSigmaQoverPt": 0.1,
+    "initialSigmaPtRel": 0.1,
+    "initialVarInflation": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  },
+  "trackFinding": {
+    "selectorConfig": {
+      "pt": {
+        "min": 500.0,
+        "max": null
+      },
+      "absEta": {
+        "min": null,
+        "max": 3.0
+      },
+      "loc0": {
+        "min": -4.0,
+        "max": 4.0
+      },
+      "nMeasurementsMin": 7,
+      "maxHoles": 2,
+      "maxOutliers": 2
+    },
+    "ckfConfig": {
+      "chi2CutOffMeasurement": 15.0,
+      "chi2CutOffOutlier": 25.0,
+      "numMeasurementsCutOff": 10,
+      "seedDeduplication": true,
+      "stayOnSeed": true
+    }
+  },
+  "output": {
+    "outputCsv": true,
+    "writeTrackStates": true,
+    "csvSubdir": "csv"
+  },
+  "logging": {
+    "level": "INFO"
+  }
+}
