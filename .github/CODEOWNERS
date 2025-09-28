@@ -1,0 +1,5 @@
+# This file defines code owners for this repository.
+# See https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Everything in this repo requires review by the repository owner.
+* @BartKuipers-00
