@@ -19,7 +19,7 @@
         "max": 360.0
       },
       "particles": {
-        "type": "proton",
+        "type": "electron",
         "count": 1,
         "randomizeCharge": true
       },
@@ -36,7 +36,7 @@
     }
   },
   "simulation_physics": {
-    "enableInteractions": false
+    "enableInteractions": true
   },
   "particleSelection": {
     "pt": {
