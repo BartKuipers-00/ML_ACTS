@@ -171,6 +171,36 @@ def runPerfectSpacepoints(
     truth_est = seed['truthEstimated']
     initial = seed['initialSigmas']
     
+    # Automatically derive bFieldInZ from detector field configuration
+    detector_field = config['detector']['field']
+    auto_bFieldInZ = detector_field['direction'][2] * detector_field['strength']
+    bFieldInZ = auto_bFieldInZ
+    if 'bFieldInZ' in options:
+        if abs(options['bFieldInZ'] - auto_bFieldInZ) > 1e-6:
+            print(f"\033[93m[WARNING]\033[0m bFieldInZ in seeding.finderOptions ({options['bFieldInZ']}) differs from detector.field.strength*direction ({auto_bFieldInZ})! Using detector value.")
+
+    # Print hyperparameters summary
+    print("\n========== HYPERPARAMETERS ==========")
+    print(f"Magnetic field (detector.field.strength): {detector_field['strength']} T")
+    print(f"Magnetic field direction: {detector_field['direction']}")
+    print(f"bFieldInZ (used): {bFieldInZ} T")
+    print("\n[Seeding: finderConfig]")
+    for k, v in finder.items():
+        print(f"  {k}: {v}")
+    print("\n[Seeding: filterConfig]")
+    filter_cfg = seed.get('filterConfig', {})
+    for k, v in filter_cfg.items():
+        print(f"  {k}: {v}")
+    print("\n[Track finding: selectorConfig]")
+    tf = config.get('trackFinding', {})
+    selector = tf.get('selectorConfig', {})
+    for k, v in selector.items():
+        print(f"  {k}: {v}")
+    print("\n[Track finding: ckfConfig]")
+    ckf = tf.get('ckfConfig', {})
+    for k, v in ckf.items():
+        print(f"  {k}: {v}")
+    print("====================================\n")
     # Create seeding config from JSON
     addSeeding(
         s,
@@ -202,7 +232,7 @@ def runPerfectSpacepoints(
             impactMax=finder['impactMax'] * u.mm
         ),
         SeedFinderOptionsArg(
-            bFieldInZ=options['bFieldInZ'] * u.T,
+            bFieldInZ=bFieldInZ * u.T,
             beamPos=(options['beamPos'][0], options['beamPos'][1])
         ),
         TruthEstimatedSeedingAlgorithmConfigArg(
@@ -288,7 +318,7 @@ if "__main__" == __name__:
         "--input-particles", 
         type=str, 
         default=None,
-        help="Path to input particles file (optional)"
+        help="Path to input particles file "
     )
     
     args = parser.parse_args()

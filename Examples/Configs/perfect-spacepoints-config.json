@@ -19,7 +19,7 @@
         "max": 360.0
       },
       "particles": {
-        "type": "electron",
+        "type": "proton",
         "count": 1,
         "randomizeCharge": true
       },
@@ -81,15 +81,27 @@
         "min": -2000.0,
         "max": 2000.0
       },
-      "maxSeedsPerSpM": 1,
+      "maxSeedsPerSpM": 2,
       "sigmaScattering": 5.0,
       "radLengthPerSeed": 0.1,
       "minPt": 500.0,
       "impactMax": 3.0
     },
     "finderOptions": {
-      "bFieldInZ": 2.0,
+      "bFieldInZ": 3.0,
       "beamPos": [0.0, 0.0]
+    },
+    "filterConfig": {
+      "deltaInvHelixDiameter": 5.0e-5,
+      "deltaRMin": 5.0,
+      "compatSeedWeight": 200.0,
+      "impactWeightFactor": 1.0,
+      "zOriginWeightFactor": 1.0,
+      "compatSeedLimit": 2,
+      "seedWeightIncrement": 0.0,
+      "numSeedIncrement": null,
+      "seedConfirmation": false,
+      "useDeltaRorTopRadius": false
     },
     "truthEstimated": {
       "deltaR": {
