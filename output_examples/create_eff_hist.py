@@ -28,7 +28,7 @@ def create_combined_efficiency_and_pt_plot(output_filename):
     canvas.Divide(4, 3)
 
     pt_bins = 100
-    pt_max = 4.0
+    pt_max = 4 # Auto-range - let ROOT determine from data
     eta_bins = 100
     eta_min = -3.0
     eta_max = 3.0

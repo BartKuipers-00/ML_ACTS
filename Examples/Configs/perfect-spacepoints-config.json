@@ -19,7 +19,7 @@
         "max": 360.0
       },
       "particles": {
-        "type": "electron",
+        "type": "muon",
         "count": 1,
         "randomizeCharge": true
       },
