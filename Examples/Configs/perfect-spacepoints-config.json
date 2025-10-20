@@ -1,3 +1,5 @@
+
+
 {
   "simulation": {
     "events": 200,
@@ -5,13 +7,14 @@
     "randomSeed": 42,
     "particleGun": {
       "momentum": {
+        "_comment": "Units are in GeV",
         "min": 0.05,
-        "max": 4.0,
+        "max": 0.5,
         "transverse": true
       },
       "eta": {
-        "min": -2.0,
-        "max": 2.0,
+        "min": -3.0,
+        "max": 3.0,
         "uniform": true
       },
       "phi": {
@@ -19,7 +22,7 @@
         "max": 360.0
       },
       "particles": {
-        "type": "muon",
+        "type": ["muon", "proton"], 
         "count": 1,
         "randomizeCharge": true
       },
@@ -28,7 +31,7 @@
   },
   "detector": {
     "field": {
-      "strength": 3.0,
+      "strength": 3.8,
       "direction": [0, 0, 1]
     },
     "geometry": {
@@ -36,22 +39,26 @@
     }
   },
   "simulation_physics": {
-    "enableInteractions": true
+    "enableInteractions": false,
+    "Comment": "note: total momentum (not P_T). Units are in GeV particle stops propagating in simulation after this limit",
+    "pMin": 0.005
   },
   "particleSelection": {
     "pt": {
-      "min": 0.2,
+      "Comment": "Minimal energy in the denominator of the efficiency calculation (concidderd reconstructabvle)",
+      "min": 0.01,
       "max": null
     },
     "measurements": {
-      "min": 9,
+      "_comment": "Min (+1) hits for particle to be considered reconstructable (denominator for efficiency)",
+      "min": 2,
       "max": null
     },
     "removeNeutral": true
   },
   "seeding": {
-    "truthSmearedSeeded": false,
-    "truthEstimatedSeeded": false,
+    "truthSmearedSeeded": false  ,
+    "truthEstimatedSeeded": true ,
     "smearing": {
       "loc0": 0.0,
       "loc0PtA": 0.0,
@@ -84,11 +91,11 @@
       "maxSeedsPerSpM": 2,
       "sigmaScattering": 5.0,
       "radLengthPerSeed": 0.1,
-      "minPt": 500.0,
+      "minPt": 0.01,
       "impactMax": 3.0
     },
     "finderOptions": {
-      "bFieldInZ": 3.0,
+      "bFieldInZ": 3.8,
       "beamPos": [0.0, 0.0]
     },
     "filterConfig": {
@@ -124,31 +131,34 @@
   "trackFinding": {
     "selectorConfig": {
       "pt": {
-        "min": 500.0,
+        "min": 0.01,
         "max": null
       },
       "absEta": {
         "min": null,
-        "max": 3.0
+        "max": 4.0
       },
       "loc0": {
         "min": -4.0,
         "max": 4.0
       },
-      "nMeasurementsMin": 7,
+      "_comment": "Min hits for reconstructed track to be kept, note should be less than or equal to nMeasurementsMin in fitting",
+      "nMeasurementsMin": 2,
       "maxHoles": 2,
       "maxOutliers": 2
     },
     "ckfConfig": {
       "chi2CutOffMeasurement": 15.0,
       "chi2CutOffOutlier": 25.0,
+      "_comment": "max number of measurements on surface after propagating mean",
       "numMeasurementsCutOff": 10,
       "seedDeduplication": true,
       "stayOnSeed": true
     }
   },
+  "matchingFractionThreshold": 0.5,
   "output": {
-    "outputCsv": true,
+    "outputCsv": false,
     "writeTrackStates": true,
     "csvSubdir": "csv"
   },

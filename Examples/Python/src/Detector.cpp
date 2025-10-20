@@ -76,6 +76,9 @@ void addDetector(Context& ctx) {
   }
 
   {
+  }
+
+  {
     auto ad = py::class_<AlignedGenericDetector, GenericDetector,
                          std::shared_ptr<AlignedGenericDetector>>(
                   mex, "AlignedGenericDetector")
