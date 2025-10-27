@@ -11,7 +11,7 @@ import awkward as ak
 
 import acts
 from acts import UnitConstants as u
-from acts.examples import GenericDetector, RootParticleReader
+from acts.examples import GenericDetector, RootParticleReader, RootParticleWriter
 
 
 from acts.examples.simulation import (
@@ -175,6 +175,15 @@ def runPerfectSpacepoints(
         s.addWhiteboardAlias("vertices_truth", hepmc3Converter.config.outputVertices)
         s.addWhiteboardAlias("particles_generated_selected", hepmc3Converter.config.outputParticles)
 
+        # Write generated particles to ROOT file
+        s.addWriter(
+            RootParticleWriter(
+                level=customLogLevel(),
+                inputParticles=hepmc3Converter.config.outputParticles,
+                filePath=str(outputDir / "particles.root"),
+            )
+        )
+
     # Add particle source: either read from ROOT file or generate via particle gun
     if inputParticlePath is not None:
         acts.logging.getLogger("PerfectSpacepointsExample").info(
@@ -220,6 +229,15 @@ def runPerfectSpacepoints(
             ),
             multiplicity=pg["multiplicity"],
             rnd=rnd,
+        )
+
+        # Write generated particles to ROOT file
+        s.addWriter(
+            RootParticleWriter(
+                level=customLogLevel(),
+                inputParticles="particles_generated",
+                filePath=str(outputDir / "particles.root"),
+            )
         )
     # else: reader branch already handled
 

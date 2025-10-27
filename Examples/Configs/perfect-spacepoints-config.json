@@ -8,8 +8,8 @@
     "particleGun": {
       "momentum": {
         "_comment": "Units are in GeV",
-        "min": 0.05,
-        "max": 0.5,
+        "min": 0.15,
+        "max": 1,
         "transverse": true
       },
       "eta": {
@@ -22,16 +22,16 @@
         "max": 360.0
       },
       "particles": {
-        "type": ["muon", "proton"], 
+        "type": ["muon", "proton", "electron", "pionplus", "pionminus"], 
         "count": 1,
         "randomizeCharge": true
       },
-      "multiplicity": 100
+      "multiplicity": 400
     }
   },
   "detector": {
     "field": {
-      "strength": 3.8,
+      "strength": 2,
       "direction": [0, 0, 1]
     },
     "geometry": {
@@ -39,14 +39,14 @@
     }
   },
   "simulation_physics": {
-    "enableInteractions": false,
+    "enableInteractions": true,
     "Comment": "note: total momentum (not P_T). Units are in GeV particle stops propagating in simulation after this limit",
-    "pMin": 0.005
+    "pMin": 1e-4
   },
   "particleSelection": {
     "pt": {
       "Comment": "Minimal energy in the denominator of the efficiency calculation (concidderd reconstructabvle)",
-      "min": 0.01,
+      "min": 0.2,
       "max": null
     },
     "measurements": {
@@ -58,7 +58,8 @@
   },
   "seeding": {
     "truthSmearedSeeded": false  ,
-    "truthEstimatedSeeded": true ,
+    "truthEstimatedSeeded": false, 
+    "comment ": "set truthEstimatedSeeded",
     "smearing": {
       "loc0": 0.0,
       "loc0PtA": 0.0,
@@ -78,7 +79,8 @@
       },
       "deltaR": {
         "min": 1.0,
-        "max": 300.0
+        "max": 175.0,
+        "comment": "Delta R range for finding seeds (4th pixel layer is at 174 mm)"
       },
       "collisionRegion": {
         "min": -250.0,
@@ -91,11 +93,11 @@
       "maxSeedsPerSpM": 2,
       "sigmaScattering": 5.0,
       "radLengthPerSeed": 0.1,
-      "minPt": 0.01,
+      "minPt": 0.2,
       "impactMax": 3.0
     },
     "finderOptions": {
-      "bFieldInZ": 3.8,
+      "bFieldInZ": 2,
       "beamPos": [0.0, 0.0]
     },
     "filterConfig": {
@@ -131,7 +133,7 @@
   "trackFinding": {
     "selectorConfig": {
       "pt": {
-        "min": 0.01,
+        "min": 0.2,
         "max": null
       },
       "absEta": {

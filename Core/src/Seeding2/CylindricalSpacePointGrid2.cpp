@@ -45,7 +45,6 @@ CylindricalSpacePointGrid2::CylindricalSpacePointGrid2(
     // calculate circle intersections of helix and max detector radius in mm.
     // bFieldInZ is in (pT/radius) natively, no need for conversion
     const float minHelixRadius = m_cfg.minPt / m_cfg.bFieldInZ;
-
     // sanity check: if yOuter takes the square root of a negative number
     if (minHelixRadius < m_cfg.rMax * 0.5) {
       throw std::domain_error(
