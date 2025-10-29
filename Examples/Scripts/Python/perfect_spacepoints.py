@@ -131,6 +131,7 @@ def runPerfectSpacepoints(
             mean=acts.Vector4(0, 0, 0, 0),
             stddev=acts.Vector4(0, 0, 0, 0),
         )
+        #create one generator per particle type and combine them in one event generator later. Then pass to the sequencer
         generators = []
         for sp in particle_types:
             if sp not in PDG_MAP:
