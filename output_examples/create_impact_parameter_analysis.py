@@ -44,7 +44,7 @@ def create_impact_parameter_plots(output_filename):
     h_d0_profile.SetMarkerSize(1.2)
     h_d0_profile.SetMinimum(0)
     # Fix y-axis scale as requested
-    h_d0_profile.SetMaximum(0.3)
+    h_d0_profile.SetMaximum(1)
     h_d0_profile.Draw("PE")
     
     # Get the actual x-axis range from the data, but ensure it starts at 0
@@ -66,7 +66,7 @@ def create_impact_parameter_plots(output_filename):
     h_z0_profile.SetMarkerSize(1.2)
     h_z0_profile.SetMinimum(0)
     # Fix y-axis scale as requested
-    h_z0_profile.SetMaximum(0.3)
+    h_z0_profile.SetMaximum(1)
     h_z0_profile.Draw("PE")
     
     # Ensure both plots use the same x-axis range starting from 0

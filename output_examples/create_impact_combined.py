@@ -1,44 +1,54 @@
+
 import ROOT
 import sys
 import os
 
-def get_impact_profile(directory, color, label, pt_bins=20, pt_min=0, pt_max=4):
+def get_impact_profiles(directory, color, label, pt_bins=20):
+
     file_path = os.path.join(directory, "tracksummary_ckf.root")
     if not os.path.exists(file_path):
-        print(f"Error: Required file '{file_path}' was not found in {directory}.")
+        print(f"[ERROR] Required file '{file_path}' was not found in {directory}.")
         return None, None
-
     root_file = ROOT.TFile.Open(file_path)
     if not root_file or root_file.IsZombie():
-        print(f"Error: Could not open the file '{file_path}'.")
+        print(f"[ERROR] Could not open the file '{file_path}'.")
         return None, None
-
     track_tree = root_file.Get("tracksummary")
     if not track_tree or not isinstance(track_tree, ROOT.TTree):
-        print("Error: Could not find TTree 'tracksummary' in the file.")
+        print(f"[ERROR] Could not find TTree 'tracksummary' in the file '{file_path}'.")
         root_file.Close()
         return None, None
+    h_d0_profile = ROOT.TProfile(f"h_d0_profile_{label}", f"Average |d_{{0}}| vs p_{{T}} ({label});p_{{T}} [GeV];Average |d_{{0}}| [mm]", pt_bins, 0, 0)
+    h_z0_profile = ROOT.TProfile(f"h_z0_profile_{label}", f"Average |z_{{0}}| vs p_{{T}} ({label});p_{{T}} [GeV];Average |z_{{0}}| [mm]", pt_bins, 0, 0)
+    track_tree.Draw(f"abs(eLOC0_fit):t_pT>>h_d0_profile_{label}", "hasFittedParams", "goff")
+    track_tree.Draw(f"abs(eLOC1_fit):t_pT>>h_z0_profile_{label}", "hasFittedParams", "goff")
 
-    h_d0_profile = ROOT.TProfile(f"h_d0_profile_{label}", f"{label}: Average |d0| vs pT", pt_bins, pt_min, pt_max)
-    h_z0_profile = ROOT.TProfile(f"h_z0_profile_{label}", f"{label}: Average |z0| vs pT", pt_bins, pt_min, pt_max)
-    n_d0 = track_tree.Draw(f"abs(eLOC0_fit):t_pT>>h_d0_profile_{label}", "hasFittedParams", "goff")
-    n_z0 = track_tree.Draw(f"abs(eLOC1_fit):t_pT>>h_z0_profile_{label}", "hasFittedParams", "goff")
-    if n_d0 == 0 or n_z0 == 0:
-        print(f"Warning: No entries for {label}")
-        root_file.Close()
-        return None, None
+    print(f"[INFO] {label} d0 entries: {h_d0_profile.GetEntries()}")
+    print(f"[INFO] {label} z0 entries: {h_z0_profile.GetEntries()}")
 
     h_d0_profile.SetLineColor(color)
-    h_d0_profile.SetMarkerColor(color)
     h_d0_profile.SetLineWidth(3)
+    h_d0_profile.SetMarkerColor(color)
     h_d0_profile.SetMarkerStyle(20)
     h_d0_profile.SetMarkerSize(1.2)
+    h_d0_profile.SetMinimum(0)
+    h_d0_profile.SetMaximum(1)
 
     h_z0_profile.SetLineColor(color)
-    h_z0_profile.SetMarkerColor(color)
     h_z0_profile.SetLineWidth(3)
+    h_z0_profile.SetMarkerColor(color)
     h_z0_profile.SetMarkerStyle(20)
     h_z0_profile.SetMarkerSize(1.2)
+    h_z0_profile.SetMinimum(0)
+    h_z0_profile.SetMaximum(1)
+
+    x_min = 0.0
+    x_max = h_d0_profile.GetXaxis().GetXmax()
+    h_d0_profile.GetXaxis().SetRangeUser(x_min, x_max)
+    h_z0_profile.GetXaxis().SetRangeUser(x_min, x_max)
+
+    h_d0_profile.SetDirectory(0)
+    h_z0_profile.SetDirectory(0)
 
     root_file.Close()
     return h_d0_profile, h_z0_profile
@@ -56,8 +66,8 @@ def main():
     canvas.Divide(2, 1)
 
     colors = [2, 4, 8, 6, 7, 9, 46, 38]
-    legend_d0 = ROOT.TLegend(0.15, 0.75, 0.45, 0.90)
-    legend_z0 = ROOT.TLegend(0.15, 0.75, 0.45, 0.90)
+    legend_d0 = ROOT.TLegend(0.65, 0.75, 0.90, 0.90)
+    legend_z0 = ROOT.TLegend(0.65, 0.75, 0.90, 0.90)
     legend_d0.SetBorderSize(0)
     legend_d0.SetFillStyle(0)
     legend_z0.SetBorderSize(0)
@@ -69,45 +79,59 @@ def main():
     for idx, folder in enumerate(folders):
         label = os.path.basename(folder).replace("_files", "")
         color = colors[idx % len(colors)]
-        h_d0, h_z0 = get_impact_profile(folder, color, label)
+        print(f"[INFO] Processing folder: {folder}")
+        h_d0, h_z0 = get_impact_profiles(folder, color, label)
+        valid = True
         if h_d0 and h_z0:
-            d0_profiles.append(h_d0)
-            z0_profiles.append(h_z0)
-            labels.append(label)
+            if h_d0.GetEntries() > 0:
+                d0_profiles.append(h_d0)
+            else:
+                print(f"[WARNING] {label} d0 profile is empty.")
+                valid = False
+            if h_z0.GetEntries() > 0:
+                z0_profiles.append(h_z0)
+            else:
+                print(f"[WARNING] {label} z0 profile is empty.")
+                valid = False
+            if valid:
+                labels.append(label)
+        else:
+            print(f"[WARNING] Skipping {folder} due to missing or invalid data.")
 
     canvas.cd(1)
     ROOT.gPad.SetLeftMargin(0.15)
     ROOT.gPad.SetRightMargin(0.15)
     ROOT.gPad.SetGrid()
     if d0_profiles:
-        d0_profiles[0].SetTitle("Average |d_{0}| vs p_{T};p_{T} [GeV];Average |d_{0}| [mm]")
-        d0_profiles[0].SetMinimum(0)
-        d0_profiles[0].SetMaximum(0.3)
-        d0_profiles[0].Draw("PE")
-        legend_d0.AddEntry(d0_profiles[0], labels[0], "lp")
-        for i in range(1, len(d0_profiles)):
-            d0_profiles[i].Draw("PE SAME")
-            legend_d0.AddEntry(d0_profiles[i], labels[i], "lp")
+        for i, h_d0 in enumerate(d0_profiles):
+            h_d0.SetStats(0)
+            draw_opt = "PE" if i == 0 else "PE SAME"
+            h_d0.Draw(draw_opt)
+            legend_d0.AddEntry(h_d0, labels[i], "lp")
         legend_d0.Draw()
+    else:
+        print("[ERROR] No valid d0 profiles to plot.")
 
     canvas.cd(2)
     ROOT.gPad.SetLeftMargin(0.15)
     ROOT.gPad.SetRightMargin(0.15)
     ROOT.gPad.SetGrid()
     if z0_profiles:
-        z0_profiles[0].SetTitle("Average |z_{0}| vs p_{T};p_{T} [GeV];Average |z_{0}| [mm]")
-        z0_profiles[0].SetMinimum(0)
-        z0_profiles[0].SetMaximum(0.3)
-        z0_profiles[0].Draw("PE")
-        legend_z0.AddEntry(z0_profiles[0], labels[0], "lp")
-        for i in range(1, len(z0_profiles)):
-            z0_profiles[i].Draw("PE SAME")
-            legend_z0.AddEntry(z0_profiles[i], labels[i], "lp")
+        for i, h_z0 in enumerate(z0_profiles):
+            h_z0.SetStats(0)
+            draw_opt = "PE" if i == 0 else "PE SAME"
+            h_z0.Draw(draw_opt)
+            legend_z0.AddEntry(h_z0, labels[i], "lp")
         legend_z0.Draw()
+    else:
+        print("[ERROR] No valid z0 profiles to plot.")
 
-    canvas.Update()
-    canvas.SaveAs(f"{output_filename}.png")
-    print(f"Combined impact parameter plot saved as '{output_filename}.png'")
+    if d0_profiles or z0_profiles:
+        canvas.Update()
+        canvas.SaveAs(f"{output_filename}.png")
+        print(f"Combined impact parameter plot saved as '{output_filename}.png'")
+    else:
+        print("[ERROR] No valid profiles found in any directory. No plot was created.")
 
 if __name__ == "__main__":
     main()

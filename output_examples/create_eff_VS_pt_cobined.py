@@ -63,7 +63,7 @@ def main():
         ROOT.gPad.SetLeftMargin(0.12)
         ROOT.gPad.SetRightMargin(0.05)
         # Set y-axis range for efficiency
-        effs[0].GetPaintedGraph().GetYaxis().SetRangeUser(0.4, 1.0)
+        effs[0].GetPaintedGraph().GetYaxis().SetRangeUser(0.3, 1.0)
         legend.AddEntry(effs[0], labels[0], "lp")
         for i in range(1, len(effs)):
             effs[i].Draw("P SAME")
