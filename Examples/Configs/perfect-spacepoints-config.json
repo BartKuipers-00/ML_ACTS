@@ -59,7 +59,7 @@
   },
   "seeding": {
     "truthSmearedSeeded": false  ,
-    "truthEstimatedSeeded": false, 
+    "truthEstimatedSeeded": true, 
     "comment ": "set truthEstimatedSeeded",
     "smearing": {
       "loc0": 0.0,
