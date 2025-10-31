@@ -77,8 +77,14 @@ struct SingleParticleSimulation {
     using PropagatorOptions =
         typename propagator_t::template Options<ActorList>;
 
-    // Construct per-call options.
-    PropagatorOptions options(geoCtx, magCtx);
+  // Construct per-call options.
+  PropagatorOptions options(geoCtx, magCtx);
+  // Quick-test: allow disabling loop protection for simulation so particles
+  // that spiral back can be propagated and produce later-turn hits. This
+  // mirrors the option available for reconstruction propagators.
+  // NOTE: this is a targeted change for testing multi-turn simulation.
+  options.loopProtection = false;
+  options.loopFraction = 1.0;
     options.stepping.maxStepSize = maxStepSize;
     options.pathLimit = pathLimit;
     // setup the interactor as part of the propagator options

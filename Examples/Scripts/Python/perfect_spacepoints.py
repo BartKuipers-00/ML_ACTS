@@ -73,6 +73,8 @@ def runPerfectSpacepoints(
     outputDir: Path,
     inputParticlePath: Optional[Path] = None,
     s=None,
+    loop_protection: Optional[bool] = None,
+    loop_fraction: Optional[float] = None,
 ):
 
 
@@ -489,6 +491,11 @@ def runPerfectSpacepoints(
             seedDeduplication=ckf["seedDeduplication"],
             stayOnSeed=ckf["stayOnSeed"],
         ),
+        # optional loop-protection overrides (only pass if explicitly set)
+        **({} if loop_protection is None and loop_fraction is None else {
+            **({} if loop_protection is None else {"loopProtection": loop_protection}),
+            **({} if loop_fraction is None else {"loopFraction": loop_fraction}),
+        }),
     )
     s.addAlgorithm(trackFinder)
     s.addWhiteboardAlias("tracks", trackFinder.config.outputTracks)
@@ -527,6 +534,22 @@ def runPerfectSpacepoints(
         logLevel=getattr(acts.logging, logging_cfg["level"]),
     )
 
+    # Additionally, enable the optional detailed matching tree without changing
+    # global defaults: create a small separate performance file with
+    # writeMatchingDetails=True so we get the `matchingdetails` TTree.
+    s.addWriter(
+        acts.examples.TrackFinderPerformanceWriter(
+            level=getattr(acts.logging, logging_cfg["level"]),
+            inputTracks=trackFinder.config.outputTracks,
+            inputParticles="particles_selected",
+            inputTrackParticleMatching="track_particle_matching",
+            inputParticleTrackMatching="particle_track_matching",
+            inputParticleMeasurementsMap="particle_measurements_map",
+            filePath=str(outputDir / f"performance_finding_ckf_matchingdetails.root"),
+            writeMatchingDetails=True,
+        )
+    )
+
     return s
 
 
@@ -551,6 +574,7 @@ if "__main__" == __name__:
         default=None,
         help="Path to input particles file "
     )
+    # Loop protection is configured in the JSON config under trackFinding.ckfConfig
     parser.add_argument(
         "run_name", 
         nargs='?',
@@ -608,6 +632,12 @@ if "__main__" == __name__:
     output_path.mkdir(parents=True, exist_ok=True)
     print(f"Output will be saved to: {output_path.resolve()}")
     
+    # Read loop-protection settings from the JSON config (if present)
+    tf_cfg = config.get("trackFinding", {})
+    ckf_cfg = tf_cfg.get("ckfConfig", {})
+    loop_protection_cfg = ckf_cfg.get("loopProtection", None)
+    loop_fraction_cfg = ckf_cfg.get("loopFraction", None)
+
     # Run simulation
     sequencer = runPerfectSpacepoints(
         config=config,
@@ -618,6 +648,8 @@ if "__main__" == __name__:
         field=field,
         outputDir=output_path,
         inputParticlePath=inputParticlePath,
+        loop_protection=loop_protection_cfg,
+        loop_fraction=loop_fraction_cfg,
     )
     sequencer.run()
 

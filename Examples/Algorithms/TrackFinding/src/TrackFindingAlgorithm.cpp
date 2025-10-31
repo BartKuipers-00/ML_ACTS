@@ -355,6 +355,9 @@ ProcessCode TrackFindingAlgorithm::execute(const AlgorithmContext& ctx) const {
                                                    : Acts::Direction::Forward();
   firstPropOptions.constrainToVolumeIds = m_cfg.constrainToVolumeIds;
   firstPropOptions.endOfWorldVolumeIds = m_cfg.endOfWorldVolumeIds;
+  // Apply loop protection settings from algorithm config
+  firstPropOptions.loopProtection = m_cfg.loopProtection;
+  firstPropOptions.loopFraction = m_cfg.loopFraction;
 
   Acts::PropagatorPlainOptions secondPropOptions(ctx.geoContext,
                                                  ctx.magFieldContext);
@@ -362,6 +365,9 @@ ProcessCode TrackFindingAlgorithm::execute(const AlgorithmContext& ctx) const {
   secondPropOptions.direction = firstPropOptions.direction.invert();
   secondPropOptions.constrainToVolumeIds = m_cfg.constrainToVolumeIds;
   secondPropOptions.endOfWorldVolumeIds = m_cfg.endOfWorldVolumeIds;
+  // Apply loop protection settings from algorithm config
+  secondPropOptions.loopProtection = m_cfg.loopProtection;
+  secondPropOptions.loopFraction = m_cfg.loopFraction;
 
   // Set the CombinatorialKalmanFilter options
   TrackFinderOptions firstOptions(ctx.geoContext, ctx.magFieldContext,

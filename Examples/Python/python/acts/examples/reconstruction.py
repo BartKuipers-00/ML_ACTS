@@ -539,6 +539,15 @@ def addSeeding(
                 doubleMatching=False,
             )
         )
+        # Expose the matching outputs on the whiteboard under convenient aliases
+        s.addWhiteboardAlias(
+            "seed_particle_matching",
+            "seed_particle_matching",
+        )
+        s.addWhiteboardAlias(
+            "particle_seed_matching",
+            "particle_seed_matching",
+        )
 
         if outputDirRoot is not None:
             addSeedPerformanceWriters(

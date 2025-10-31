@@ -1,0 +1,23 @@
+Primary particle id=4503599644147712 (contributing hits=11)
+  Pt = 10.063 , eta = 2.973
+Total unique layers entered: 10
+
+Per-volume summary:
+  volume 14:, Strip Endcap, unique layers hit=2
+  volume 9:, Pixel Endcap, unique layers hit=7
+  volume 8:, Pixel Barrel, unique layers hit=1
+
+Per-measurement table (measurements only, outer -> inner):
+idx  orig_idx  vol   lay    mod      r_mm      x_mm      y_mm      z_mm  
+-----------------------------------------------------------------
+   0       10    14    12      36     302.2     165.9     252.6    2945.5
+   1        9    14    10      36     261.2     143.6     218.1    2545.5
+   2        8     9    14      85     154.1      85.2     128.4    1502.0
+   3        7     9    12      85     133.6      73.9     111.3    1302.0
+   4        6     9    10      85     113.0      62.6      94.1    1102.0
+   5        5     9     8      27      98.7      54.7      82.1     962.0
+   6        4     9     6      27      84.3      46.8      70.2     822.0
+   7        3     9     4      27      72.0      40.0      59.9     702.0
+   8        2     9     2      27      61.7      34.3      51.3     602.0
+   9        1     9     2      26      61.3      34.0      51.0     598.0
+  10        0     8     2     187      31.8      17.7      26.4     309.7

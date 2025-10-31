@@ -69,8 +69,18 @@ TrackFinderPerformanceWriter::TrackFinderPerformanceWriter(
   if (m_cfg.writeMatchingDetails) {
     m_matchingTree = new TTree("matchingdetails", "matchingdetails");
 
-    m_matchingTree->Branch("event_nr", &m_treeEventNr);
+  // Detailed per-(track,particle) branches
+  m_matchingTree->Branch("event_nr", &m_treeEventNr);
+    m_matchingTree->Branch("track_index", &m_treeTrackIndex);
     m_matchingTree->Branch("particle_id", &m_treeParticleId);
+    m_matchingTree->Branch("nMatchedHitsOnTrack", &m_treeNMatchedHitsOnTrack);
+    m_matchingTree->Branch("nTrackMeasurements", &m_treeNTrackMeasurements);
+    m_matchingTree->Branch("nTrackMeasurementsWithOutliers", &m_treeNTrackMeasurementsWithOutliers);
+    m_matchingTree->Branch("nParticleTruthHits", &m_treeNParticleTruthHits);
+    m_matchingTree->Branch("purity", &m_treePurity);
+    m_matchingTree->Branch("completeness", &m_treeCompleteness);
+    m_matchingTree->Branch("track_pt", &m_treeTrackPt);
+    // keep legacy branch for compatibility
     m_matchingTree->Branch("matched", &m_treeIsMatched);
   }
 
@@ -260,6 +270,45 @@ ProcessCode TrackFinderPerformanceWriter::writeT(
         m_duplicationPlotCache, fittedParameters,
         particleMatch.classification == TrackMatchClassification::Duplicate);
 
+    // Optionally fill detailed per-(track,particle) matching rows
+    if (m_cfg.writeMatchingDetails && m_matchingTree != nullptr) {
+      for (const auto& phc : particleMatch.contributingParticles) {
+        // event and identifiers
+        m_treeEventNr = ctx.eventNumber;
+        m_treeTrackIndex = track.index();
+  m_treeParticleId = static_cast<std::uint64_t>(phc.particleId.value());
+
+        // hit counts
+        m_treeNMatchedHitsOnTrack = static_cast<std::uint32_t>(phc.hitCount);
+        m_treeNTrackMeasurements = static_cast<std::uint32_t>(track.nMeasurements());
+        m_treeNTrackMeasurementsWithOutliers = static_cast<std::uint32_t>(track.nMeasurements() + track.nOutliers());
+
+        // particle truth hits (may be zero if not present)
+        std::size_t nParticleHits = 0;
+        if (particleMeasurementsMap.contains(phc.particleId)) {
+          const auto meas = particleMeasurementsMap.equal_range(phc.particleId);
+          nParticleHits = std::distance(meas.first, meas.second);
+        }
+        m_treeNParticleTruthHits = static_cast<std::uint32_t>(nParticleHits);
+
+        // derived metrics
+        m_treePurity = (m_treeNTrackMeasurements > 0)
+                          ? static_cast<float>(m_treeNMatchedHitsOnTrack) / static_cast<float>(m_treeNTrackMeasurements)
+                          : -1.0f;
+        m_treeCompleteness = (m_treeNParticleTruthHits > 0)
+                                  ? static_cast<float>(m_treeNMatchedHitsOnTrack) / static_cast<float>(m_treeNParticleTruthHits)
+                                  : -1.0f;
+
+        // track kinematics (pt)
+        m_treeTrackPt = static_cast<float>(perp(fittedParameters.momentum()));
+
+        // legacy matched flag: true if this particle is the majority particle
+        m_treeIsMatched = (particleMatch.particle.has_value() && particleMatch.particle.value() == phc.particleId);
+
+        m_matchingTree->Fill();
+      }
+    }
+
     if (particleMatch.particle.has_value() &&
         particleMeasurementsMap.contains(particleMatch.particle.value())) {
       const auto measurements =
@@ -350,23 +399,8 @@ ProcessCode TrackFinderPerformanceWriter::writeT(
     m_nTotalParticles += 1;
   }
 
-  // Write additional stuff to TTree
-  if (m_cfg.writeMatchingDetails && m_matchingTree != nullptr) {
-    for (const auto& particle : particles) {
-      auto particleId = particle.particleId();
-
-      m_treeEventNr = ctx.eventNumber;
-      m_treeParticleId = particleId.value();
-
-      m_treeIsMatched = false;
-      if (auto imatched = particleTrackMatching.find(particleId);
-          imatched != particleTrackMatching.end()) {
-        m_treeIsMatched = imatched->second.track.has_value();
-      }
-
-      m_matchingTree->Fill();
-    }
-  }
+  // Previously this wrote one row per truth particle. The writer now
+  // fills detailed per-(track,particle) rows while iterating tracks above.
 
   return ProcessCode::SUCCESS;
 }

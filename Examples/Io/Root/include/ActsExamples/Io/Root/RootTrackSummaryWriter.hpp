@@ -136,8 +136,6 @@ class RootTrackSummaryWriter final : public WriterT<ConstTrackContainer> {
   // The majority truth particle info
   /// The number of hits from majority particle
   std::vector<unsigned int> m_nMajorityHits;
-  /// The matching fraction (nMajorityHits / nMeasurements)
-  std::vector<float> m_matchingFraction;
   /// The particle Id of the majority particle
   std::vector<std::uint64_t> m_majorityParticleId;
   /// The classification of the reconstructed track

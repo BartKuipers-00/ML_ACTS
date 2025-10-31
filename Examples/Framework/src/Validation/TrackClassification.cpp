@@ -53,10 +53,19 @@ void ActsExamples::identifyContributingParticles(
 
   for (auto hitIndex : protoTrack) {
     // register all particles that generated this hit
-    for (const auto& [_, value] :
-         makeRange(hitParticlesMap.equal_range(hitIndex))) {
-      increaseHitCount(particleHitCounts, value);
-    }
+      // register all particles that generated this hit
+      // NOTE: measurement -> particle map may contain multiple entries for the
+      // same particle (e.g. multiple sim-hits from the same particle clustered
+      // into one measurement). Count each particle at most once per
+      // measurement to avoid over-counting when computing per-track hit counts.
+      std::vector<ActsFatras::Barcode> seen;
+      for (const auto& [_, value] :
+           makeRange(hitParticlesMap.equal_range(hitIndex))) {
+        if (!std::ranges::any_of(seen, [&](const auto& v) { return v == value; })) {
+          increaseHitCount(particleHitCounts, value);
+          seen.push_back(value);
+        }
+      }
   }
   sortHitCount(particleHitCounts);
 }
@@ -80,10 +89,14 @@ void ActsExamples::identifyContributingParticles(
     IndexSourceLink sl =
         state.getUncalibratedSourceLink().template get<IndexSourceLink>();
     auto hitIndex = sl.index();
-    for (const auto& [_, value] :
-         makeRange(hitParticlesMap.equal_range(hitIndex))) {
-      increaseHitCount(particleHitCounts, value);
-    }
+      std::vector<ActsFatras::Barcode> seen;
+      for (const auto& [_, value] :
+           makeRange(hitParticlesMap.equal_range(hitIndex))) {
+        if (!std::ranges::any_of(seen, [&](const auto& v) { return v == value; })) {
+          increaseHitCount(particleHitCounts, value);
+          seen.push_back(value);
+        }
+      }
     return true;
   });
   sortHitCount(particleHitCounts);
@@ -104,10 +117,14 @@ void ActsExamples::identifyContributingParticles(
     IndexSourceLink sl =
         state.getUncalibratedSourceLink().template get<IndexSourceLink>();
     auto hitIndex = sl.index();
-    for (const auto& [_, value] :
-         makeRange(hitParticlesMap.equal_range(hitIndex))) {
-      increaseHitCount(particleHitCounts, value);
-    }
+      std::vector<ActsFatras::Barcode> seen;
+      for (const auto& [_, value] :
+           makeRange(hitParticlesMap.equal_range(hitIndex))) {
+        if (!std::ranges::any_of(seen, [&](const auto& v) { return v == value; })) {
+          increaseHitCount(particleHitCounts, value);
+          seen.push_back(value);
+        }
+      }
   }
   sortHitCount(particleHitCounts);
 }

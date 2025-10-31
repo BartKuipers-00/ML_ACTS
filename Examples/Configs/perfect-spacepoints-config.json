@@ -2,20 +2,19 @@
 
 {
   "simulation": {
-    "events": 200,
+    "events": 1,
     "numThreads": -1,
     "randomSeed": 42,
     "particleGun": {
       "momentum": {
         "_comment": "Units are in GeV",
-        "min": 0.1,
-        "max": 2,
+        "min": 0.9,
+        "max": 1.0,
         "transverse": true
       },
       "eta": {
-        "min": -3.0,
-        "max": 3.0,
-
+        "min": -0.1,
+        "max": 0.2,
         "uniform": true
       },
       "phi": {
@@ -23,16 +22,16 @@
         "max": 360.0
       },
       "particles": {
-        "type": ["pionplus"], 
+        "type": ["muon"], 
         "count": 1,
         "randomizeCharge": true
       },
-      "multiplicity": 1000
+      "multiplicity": 1
     }
   },
   "detector": {
     "field": {
-      "strength": 2,
+      "strength": 8,
       "direction": [0, 0, 1]
     },
     "geometry": {
@@ -98,7 +97,7 @@
       "impactMax": 3.0
     },
     "finderOptions": {
-      "bFieldInZ": 2,
+      "bFieldInZ": 8,
       "beamPos": [0.0, 0.0]
     },
     "filterConfig": {
@@ -153,6 +152,8 @@
     "ckfConfig": {
       "chi2CutOffMeasurement": 15.0,
       "chi2CutOffOutlier": 25.0,
+      "loopProtection": true,
+      "loopFraction": 0.1,
       "_comment": "max number of measurements; If a track accumulates more than .. measurements, the algorithm will stop adding more hits to that track.",
       "numMeasurementsCutOff": 14,
       "seedDeduplication": true,

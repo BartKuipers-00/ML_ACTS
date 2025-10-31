@@ -9,22 +9,17 @@
 #include "ActsExamples/Io/Root/RootTrackSummaryWriter.hpp"
 
 #include "Acts/Definitions/TrackParametrization.hpp"
-#include "Acts/EventData/GenericBoundTrackParameters.hpp"
-#include "Acts/EventData/MultiTrajectoryHelpers.hpp"
 #include "Acts/EventData/VectorMultiTrajectory.hpp"
 #include "Acts/Surfaces/Surface.hpp"
 #include "Acts/TrackFitting/GsfOptions.hpp"
 #include "Acts/Utilities/Intersection.hpp"
-#include "Acts/Utilities/MultiIndex.hpp"
 #include "Acts/Utilities/Result.hpp"
 #include "Acts/Utilities/detail/periodic.hpp"
-#include "ActsExamples/EventData/IndexSourceLink.hpp"
 #include "ActsExamples/EventData/TruthMatching.hpp"
 #include "ActsExamples/Framework/AlgorithmContext.hpp"
 #include "ActsExamples/Framework/WriterT.hpp"
 #include "ActsExamples/Validation/TrackClassification.hpp"
 #include "ActsFatras/EventData/Barcode.hpp"
-#include "ActsFatras/EventData/Particle.hpp"
 
 #include <array>
 #include <cmath>
@@ -32,7 +27,6 @@
 #include <cstdint>
 #include <ios>
 #include <limits>
-#include <memory>
 #include <numbers>
 #include <optional>
 #include <ostream>
@@ -95,7 +89,6 @@ RootTrackSummaryWriter::RootTrackSummaryWriter(
   m_outputTree->Branch("outlierLayer", &m_outlierLayer);
 
   m_outputTree->Branch("nMajorityHits", &m_nMajorityHits);
-  m_outputTree->Branch("matchingFraction", &m_matchingFraction);
   m_outputTree->Branch("majorityParticleId", &m_majorityParticleId);
   m_outputTree->Branch("trackClassification", &m_trackClassification);
   m_outputTree->Branch("t_charge", &m_t_charge);
@@ -280,8 +273,7 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
     }
 
     // Initialize the truth particle info
-    ActsFatras::Barcode majorityParticleId(
-        std::numeric_limits<std::size_t>::max());
+    ActsFatras::Barcode majorityParticleId{};
     TrackMatchClassification trackClassification =
         TrackMatchClassification::Unknown;
     unsigned int nMajorityHits = std::numeric_limits<unsigned int>::max();
@@ -324,9 +316,8 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
         foundMajorityParticle = true;
 
         const auto& particle = *ip;
-        ACTS_VERBOSE("Find the truth particle with barcode "
-                     << majorityParticleId << "="
-                     << majorityParticleId.value());
+  ACTS_VERBOSE("Find the truth particle with barcode "
+         << majorityParticleId << "=" << majorityParticleId.value());
         // Get the truth particle info at vertex
         t_p = particle.absoluteMomentum();
         t_charge = static_cast<int>(particle.charge());
@@ -345,13 +336,13 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
         t_prodR = std::sqrt(t_vx * t_vx + t_vy * t_vy);
 
         if (pSurface != nullptr) {
-          auto intersection =
-              pSurface
-                  ->intersect(ctx.geoContext, particle.position(),
-                              particle.direction(),
-                              Acts::BoundaryTolerance::Infinite())
-                  .closest();
-          auto position = intersection.position();
+      auto intersection =
+        pSurface
+          ->intersect(ctx.geoContext, particle.position(),
+                particle.direction(),
+                Acts::BoundaryTolerance::Infinite())
+          .closest();
+      auto position = intersection.position();
 
           // get the truth perigee parameter
           auto lpResult = pSurface->globalToLocal(ctx.geoContext, position,
@@ -364,9 +355,9 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
           }
         }
       } else {
-        ACTS_DEBUG("Truth particle with barcode "
-                   << majorityParticleId << "=" << majorityParticleId.value()
-                   << " not found in the input collection!");
+  ACTS_DEBUG("Truth particle with barcode "
+       << majorityParticleId << "=" << majorityParticleId.value()
+       << " not found in the input collection!");
       }
     }
     if (!foundMajorityParticle) {
@@ -376,11 +367,9 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
 
     // Push the corresponding truth particle info for the track.
     // Always push back even if majority particle not found
-    m_majorityParticleId.push_back(majorityParticleId.value());
+  m_majorityParticleId.push_back(majorityParticleId.value());
     m_trackClassification.push_back(static_cast<int>(trackClassification));
-  m_nMajorityHits.push_back(nMajorityHits);
-  float matchingFraction = (track.nMeasurements() > 0) ? static_cast<float>(nMajorityHits) / track.nMeasurements() : -1.0f;
-  m_matchingFraction.push_back(matchingFraction);
+    m_nMajorityHits.push_back(nMajorityHits);
     m_t_charge.push_back(t_charge);
     m_t_time.push_back(t_time);
     m_t_vx.push_back(t_vx);
@@ -565,7 +554,6 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
   m_outlierLayer.clear();
 
   m_nMajorityHits.clear();
-  m_matchingFraction.clear();
   m_majorityParticleId.clear();
   m_trackClassification.clear();
   m_t_charge.clear();

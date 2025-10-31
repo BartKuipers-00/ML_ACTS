@@ -1,0 +1,18 @@
+Primary particle id=4503599644147712 (contributing hits=7)
+  Pt = 0.442 , eta = 0.203
+Total unique layers entered: 7
+
+Per-volume summary:
+  volume 13:, ShortStrip Barrel, unique layers hit=3
+  volume 8:, Pixel Barrel, unique layers hit=4
+
+Per-measurement table (measurements only, outer -> inner):
+idx  orig_idx  vol   lay    mod      r_mm      x_mm      y_mm      z_mm  
+-----------------------------------------------------------------
+   0        6    13     6     920     498.5    -119.2     484.0      98.5
+   1        5    13     4     658     360.5       8.3     360.4      68.2
+   2        4    13     2     429     263.8      48.8     259.2      49.0
+   3        3     8     8     601     171.9      55.7     162.7      31.7
+   4        2     8     6     400     115.6      46.7     105.8      21.4
+   5        1     8     4     246      71.7      33.3      63.5      13.4
+   6        0     8     2     123      31.6      16.3      27.0       5.9

@@ -135,6 +135,10 @@ class TrackFindingAlgorithm final : public IAlgorithm {
     std::vector<std::uint32_t> constrainToVolumeIds;
     /// The volume ids to stop the track finding at
     std::vector<std::uint32_t> endOfWorldVolumeIds;
+        /// Whether to enable loop protection in the propagator (default: true)
+        bool loopProtection = true;
+        /// Fraction of full helix to allow before aborting (default: 0.5)
+        double loopFraction = 0.5;
   };
 
   /// Constructor of the track finding algorithm

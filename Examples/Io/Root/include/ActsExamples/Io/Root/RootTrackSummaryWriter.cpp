@@ -95,7 +95,6 @@ RootTrackSummaryWriter::RootTrackSummaryWriter(
   m_outputTree->Branch("outlierLayer", &m_outlierLayer);
 
   m_outputTree->Branch("nMajorityHits", &m_nMajorityHits);
-  m_outputTree->Branch("matchingFraction", &m_matchingFraction);
   m_outputTree->Branch("majorityParticleId", &m_majorityParticleId);
   m_outputTree->Branch("trackClassification", &m_trackClassification);
   m_outputTree->Branch("t_charge", &m_t_charge);
@@ -378,9 +377,7 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
     // Always push back even if majority particle not found
     m_majorityParticleId.push_back(majorityParticleId.value());
     m_trackClassification.push_back(static_cast<int>(trackClassification));
-  m_nMajorityHits.push_back(nMajorityHits);
-  float matchingFraction = (track.nMeasurements() > 0) ? static_cast<float>(nMajorityHits) / track.nMeasurements() : -1.0f;
-  m_matchingFraction.push_back(matchingFraction);
+    m_nMajorityHits.push_back(nMajorityHits);
     m_t_charge.push_back(t_charge);
     m_t_time.push_back(t_time);
     m_t_vx.push_back(t_vx);
@@ -566,7 +563,6 @@ ProcessCode RootTrackSummaryWriter::writeT(const AlgorithmContext& ctx,
   m_outlierLayer.clear();
 
   m_nMajorityHits.clear();
-  m_matchingFraction.clear();
   m_majorityParticleId.clear();
   m_trackClassification.clear();
   m_t_charge.clear();

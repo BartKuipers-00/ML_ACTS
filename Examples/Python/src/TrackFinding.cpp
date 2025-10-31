@@ -239,13 +239,14 @@ void addTrackFinding(Context& ctx) {
         alg, "TrackFinderFunction");
 
     auto c = py::class_<Config>(alg, "Config").def(py::init<>());
-    ACTS_PYTHON_STRUCT(c, inputMeasurements, inputInitialTrackParameters,
-                       inputSeeds, outputTracks, trackingGeometry,
-                       magneticField, findTracks, measurementSelectorCfg,
-                       trackSelectorCfg, maxSteps, twoWay, reverseSearch,
-                       seedDeduplication, stayOnSeed, pixelVolumeIds,
-                       stripVolumeIds, maxPixelHoles, maxStripHoles, trimTracks,
-                       constrainToVolumeIds, endOfWorldVolumeIds);
+  ACTS_PYTHON_STRUCT(c, inputMeasurements, inputInitialTrackParameters,
+             inputSeeds, outputTracks, trackingGeometry,
+             magneticField, findTracks, measurementSelectorCfg,
+             trackSelectorCfg, maxSteps, twoWay, reverseSearch,
+             seedDeduplication, stayOnSeed, pixelVolumeIds,
+             stripVolumeIds, maxPixelHoles, maxStripHoles, trimTracks,
+             constrainToVolumeIds, endOfWorldVolumeIds,
+             loopProtection, loopFraction);
   }
 
   {
