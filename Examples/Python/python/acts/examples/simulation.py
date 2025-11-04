@@ -462,6 +462,10 @@ def addFatras(
     rnd: acts.examples.RandomNumbers,
     enableInteractions: bool = True,
     pMin: Optional[float] = None,
+    maxSteps: Optional[int] = None,
+    loopProtection: Optional[bool] = None,
+    loopFraction: Optional[float] = None,
+    debugStepInterval: Optional[int] = None,
     inputParticles: str = "particles_generated_selected",
     outputParticles: str = "particles_simulated",
     outputSimHits: str = "simhits",
@@ -491,7 +495,10 @@ def addFatras(
     """
 
     customLogLevel = acts.examples.defaultLogging(s, logLevel)
-
+    # Construct the algorithm via kwargs that map to the C++ Config and
+    # constructor-level 'level' parameter. We avoid passing debugStepInterval
+    # here as a constructor kwarg because older Python bindings might not yet
+    # expose that field — in that case we set it after construction (or warn).
     alg = acts.examples.FatrasSimulation(
         **acts.examples.defaultKWArgs(
             level=customLogLevel(),
@@ -507,8 +514,25 @@ def addFatras(
             emEnergyLossRadiation=enableInteractions,
             emPhotonConversion=enableInteractions,
             pMin=pMin,
+            **({} if maxSteps is None else {"maxSteps": maxSteps}),
+            **({} if loopProtection is None else {"loopProtection": loopProtection}),
+            **({} if loopFraction is None else {"loopFraction": loopFraction}),
         )
     )
+
+    # Try to set debugStepInterval on the algorithm's Config if requested.
+    if debugStepInterval is not None:
+        try:
+            alg.config.debugStepInterval = debugStepInterval
+        except Exception:
+            # If setting fails it likely means the Python bindings were built
+            # before the C++ Config gained the field. Inform the user.
+            print(
+                "Warning: FatrasSimulation.Config does not expose 'debugStepInterval'.\n"
+                "To enable per-step debug printing when using logging.level=DEBUG,\n"
+                "please rebuild the Python bindings so the new Config field is\n"
+                "exposed to Python (or use a C++ build with the change)."
+            )
     s.addAlgorithm(alg)
 
     s.addWhiteboardAlias("particles", outputParticles)

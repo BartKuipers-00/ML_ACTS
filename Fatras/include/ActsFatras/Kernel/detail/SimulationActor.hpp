@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <sstream>
 
 namespace ActsFatras::detail {
 
@@ -47,6 +48,8 @@ struct SimulationActor {
   interactions_t interactions;
   /// Selector for surfaces that should generate hits.
   hit_surface_selector_t selectHitSurface;
+  /// Debug: interval (in propagator steps) at which to print particle state.    (Bart)
+  std::uint32_t debugStepInterval = 0u;
   /// Initial particle state.
   Particle initialParticle;
 
@@ -95,6 +98,35 @@ struct SimulationActor {
     // this must happen for every step (not just on surface) and before
     // everything, e.g. any interactions that could modify the state.
     result.particle = makeParticle(result.particle, state, stepper, navigator);
+
+    // Optional debug print of particle state every debugStepInterval steps.   /(BART)
+    if (debugStepInterval > 0u) {
+      // step count is stored in the stepper state
+      const auto stepCount = state.stepping.nSteps;
+      if (stepCount != 0u && (stepCount % debugStepInterval) == 0u) {
+        // only print through logger if DEBUG (or lower) is enabled
+        if (logger.doPrint(Acts::Logging::Level::DEBUG)) {
+          std::ostringstream os;
+       const auto &p = result.particle;
+       // position and kinematics
+       auto pos = p.fourPosition();
+       double px = p.fourMomentum().x();
+       double py = p.fourMomentum().y();
+       double pz = p.fourMomentum().z();
+       double qop = p.qOverP();
+       double x = pos.x();
+       double y = pos.y();
+       double z = pos.z();
+       double r = std::hypot(x, y);
+       os << "[FATRAS DEBUG] step=" << stepCount
+         << " pid=" << p.particleId().value() // compact numeric id
+         << " x=" << x << " y=" << y << " z=" << z << " r=" << r
+         << " p=(" << px << "," << py << "," << pz << ")"
+         << " q/p=" << qop;
+          logger.log(Acts::Logging::Level::DEBUG, os.str());
+        }
+      }
+    }
 
     // decay check. needs to happen at every step, not just on surfaces.
     if (std::isfinite(result.properTimeLimit) &&

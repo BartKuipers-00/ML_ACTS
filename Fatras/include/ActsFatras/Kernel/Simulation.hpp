@@ -37,6 +37,12 @@ template <typename propagator_t, typename interactions_t,
 struct SingleParticleSimulation {
   /// How and within which geometry to propagate the particle.
   propagator_t propagator;
+  /// Maximum number of steps for one propagate call (default mirrors Propagator)
+  unsigned int maxSteps = 1000;
+  /// Loop protection: adapt pathLimit to avoid infinite spirals
+  bool loopProtection = true;
+  /// Allowed loop fraction (1.0 == full loop)
+  double loopFraction = 0.5;
   /// Absolute maximum step size
   double maxStepSize = std::numeric_limits<double>::max();
   /// Absolute maximum path length
@@ -47,6 +53,8 @@ struct SingleParticleSimulation {
   interactions_t interactions;
   /// Selector for surfaces that should generate hits.
   hit_surface_selector_t selectHitSurface;
+  /// Debug: print particle state every N steps when > 0
+  std::uint32_t debugStepInterval = 0u;
   /// Logger for debug output.
   std::unique_ptr<const Acts::Logger> logger;
 
@@ -77,16 +85,14 @@ struct SingleParticleSimulation {
     using PropagatorOptions =
         typename propagator_t::template Options<ActorList>;
 
-  // Construct per-call options.
-  PropagatorOptions options(geoCtx, magCtx);
-  // Quick-test: allow disabling loop protection for simulation so particles
-  // that spiral back can be propagated and produce later-turn hits. This
-  // mirrors the option available for reconstruction propagators.
-  // NOTE: this is a targeted change for testing multi-turn simulation.
-  options.loopProtection = false;
-  options.loopFraction = 1.0;
+    // Construct per-call options.
+    PropagatorOptions options(geoCtx, magCtx);
     options.stepping.maxStepSize = maxStepSize;
     options.pathLimit = pathLimit;
+    // Apply per-simulator defaults (can be tuned by caller via members)
+    options.maxSteps = maxSteps;
+    options.loopProtection = loopProtection;
+    options.loopFraction = loopFraction;
     // setup the interactor as part of the propagator options
     auto &actor = options.actorList.template get<Actor>();
     actor.generator = &generator;
@@ -94,6 +100,9 @@ struct SingleParticleSimulation {
     actor.interactions = interactions;
     actor.selectHitSurface = selectHitSurface;
     actor.initialParticle = particle;
+  // forward debug interval to the actor so it can print per-step state if
+  // configured (and the logger is at DEBUG level)
+  actor.debugStepInterval = debugStepInterval;
 
     if (particle.hasReferenceSurface()) {
       auto result = propagator.propagate(

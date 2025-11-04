@@ -34,11 +34,13 @@ void addExampleAlgorithms(Context& ctx) {
   mex.def("readJsonGeometryList", ActsExamples::readJsonGeometryList);
 
   ACTS_PYTHON_DECLARE_ALGORITHM(
-      ActsExamples::FatrasSimulation, mex, "FatrasSimulation", inputParticles,
-      outputParticles, outputSimHits, randomNumbers, trackingGeometry,
-      magneticField, pMin, emScattering, emEnergyLossIonisation,
-      emEnergyLossRadiation, emPhotonConversion, generateHitsOnSensitive,
-      generateHitsOnMaterial, generateHitsOnPassive, averageHitsPerParticle);
+    ActsExamples::FatrasSimulation, mex, "FatrasSimulation", inputParticles,
+    outputParticles, outputSimHits, randomNumbers, trackingGeometry,
+    magneticField, pMin, emScattering, emEnergyLossIonisation,
+    emEnergyLossRadiation, emPhotonConversion, generateHitsOnSensitive,
+    generateHitsOnMaterial, generateHitsOnPassive,
+    /* propagation tuning */ maxSteps, loopProtection, loopFraction,
+    averageHitsPerParticle, debugStepInterval);
 
   ACTS_PYTHON_DECLARE_ALGORITHM(ActsExamples::ParticlesPrinter, mex,
                                 "ParticlesPrinter", inputParticles);

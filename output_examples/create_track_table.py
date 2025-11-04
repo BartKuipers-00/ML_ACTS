@@ -5,8 +5,7 @@ Reads `hits.root` (or the provided file) in the current directory, assumes a
 single-particle run, and produces a per-hit table and a short summary of how
 many unique layers were traversed per detector volume. If available, the
 script will also infer the primary particle transverse momentum (Pt) and
-pseudorapidity (eta) using momentum stored in `hits.root` or falling back to
-`particles.root` / `particles_simulation.root`.
+pseudorapidity (eta) using momentum stored in `hits.root`.
 
 Output files (written to current working directory):
   <out_prefix>.txt   - short textual summary (this script intentionally
@@ -22,19 +21,12 @@ import sys
 from pathlib import Path
 
 # lazy imports (install if missing)
-try:
-    import uproot
-    import numpy as np
-except Exception as e:
-    print("Missing Python packages or import error:", e)
-    print("Please ensure uproot and numpy are installed.")
-    sys.exit(2)
 
-LONG_STRIP_RADII = np.array([820., 1020.])
+import uproot
+import numpy as np
 
-# Known endcap disk z-positions (absolute values, mm) - from your detector note
-PIXEL_ENDCAP_Z = np.array([600., 700., 820., 960., 1100., 1300., 1500.])
-STRIP_ENDCAP_Z = np.array([1220., 1500., 1800., 2150., 2550., 2950.])
+
+# Known endcap disk z-positions (absolute values, mm) - removed (not used)
 
 # Optional explicit mapping from volume_id -> detector region. If a
 # volume_id appears here it will be used (1:1 mapping). Extend this dict
@@ -54,14 +46,13 @@ VOLUME_MAP = {
 }
 
 
-# Note: classification is driven solely by VOLUME_MAP. Heuristics removed.
+# Classification is driven by `VOLUME_MAP`.
 
 
 def main():
     p = argparse.ArgumentParser(description='Create track table from hits.root')
     p.add_argument('out_prefix', help='output prefix (files written as <prefix>.txt)')
     p.add_argument('--hits', '-i', help='path to hits.root (default: ./hits.root)', default='hits.root')
-    p.add_argument('--volume-map-only', action='store_true', help='Only use explicit VOLUME_MAP to classify volumes; do not apply geometric heuristics')
     args = p.parse_args()
 
     out_prefix = Path(args.out_prefix)
@@ -110,48 +101,12 @@ def main():
 
     r = np.sqrt(tx**2 + ty**2)
 
-    # optional per-hit particle id and momentum in hits.root
-    pid_hit_arr = np.asarray(t['particle_id'].array()) if 'particle_id' in t.keys() else None
+    # detect whether per-hit momentum exists in the file; don't read arrays
+    # until (and unless) we actually need them to avoid copying large arrays.
     has_momentum_in_hits = all(k in t.keys() for k in ('tpx', 'tpy', 'tpz'))
-    if has_momentum_in_hits:
-        hit_tpx = np.asarray(t['tpx'].array())
-        hit_tpy = np.asarray(t['tpy'].array())
-        hit_tpz = np.asarray(t['tpz'].array())
-    else:
-        hit_tpx = hit_tpy = hit_tpz = None
+    hit_tpx = hit_tpy = hit_tpz = None
 
-    # Fallback: try to read a particles file nearby to map particle_id -> (px,py,pz)
-    particles_map = None
-    for alt in ('particles.root', 'particles_simulation.root', 'particles.root'):
-        altp = Path(alt)
-        if not altp.exists():
-            continue
-        try:
-            pr = uproot.open(str(altp))
-            pname = None
-            for k in pr.keys():
-                if k.lower().startswith('particles'):
-                    pname = k
-                    break
-            if pname is None:
-                continue
-            ptree = pr[pname]
-            if not all(k in ptree.keys() for k in ('particle_id', 'px', 'py', 'pz')):
-                continue
-            p_pid = np.asarray(ptree['particle_id'].array())
-            p_px = np.asarray(ptree['px'].array())
-            p_py = np.asarray(ptree['py'].array())
-            p_pz = np.asarray(ptree['pz'].array())
-            particles_map = {}
-            for i, pid in enumerate(p_pid):
-                if int(pid) not in particles_map:
-                    particles_map[int(pid)] = (float(p_px[i]), float(p_py[i]), float(p_pz[i]))
-            break
-        except Exception:
-            particles_map = None
-            continue
 
-    # Build simple rows list (avoid pandas to keep script light)
     rows = []
     for i in range(len(vol)):
         rows.append({
@@ -182,96 +137,93 @@ def main():
     for row in rows:
         grouped[row['volume_id']].append(row)
 
-    # Enforce strict volume-id mapping: require that every encountered volume_id
-    # exists in VOLUME_MAP. Do not fall back to geometric heuristics. If any
-    # unknown volume ids are present, print them and exit with non-zero code.
-    encountered_vids = set(grouped.keys())
-    unknown_vids = sorted([v for v in encountered_vids if v not in VOLUME_MAP])
-    if unknown_vids:
-        print('Error: encountered volume_id(s) not present in VOLUME_MAP:', unknown_vids)
-        print('Please extend VOLUME_MAP in create_track_table.py to include these volume ids.')
-        sys.exit(2)
-
+    # Build per-volume info. If a volume_id is unknown in VOLUME_MAP, warn
+    # but continue — classify it as 'Unknown' instead of aborting.
     for vid, sub in grouped.items():
         mask = [r for r in sub if r['module_id'] != 0]
-        if mask:
-            median_r = float(np.median([r['r_mm'] for r in mask]))
-            median_abs_z = float(np.median([abs(r['z_mm']) for r in mask]))
-        else:
-            median_r = float(np.median([r['r_mm'] for r in sub]))
-            median_abs_z = float(np.median([abs(r['z_mm']) for r in sub]))
-
-        # Classification is driven solely by VOLUME_MAP. We already enforced
-        # that all encountered volume_ids are present in VOLUME_MAP earlier.
-        vid_int = int(vid)
         n_layers = len(set([r['layer_id'] for r in mask]))
-        vm = VOLUME_MAP[vid_int]
-        is_barrel = (vm['region'] == 'barrel')
-        is_endcap = (vm['region'] == 'endcap')
-        barrel_type = vm['type'] if is_barrel else None
-        endcap_type = vm['type'] if is_endcap else None
-        detname = vm['type'] if is_barrel else (vm['type'] + 'Endcap')
-        # optionally compute nearest disk z for endcaps for informative output
-        nearest_z = None
-        if is_endcap:
-            if vm['type'].lower().startswith('pixel'):
-                nearest_z = float(PIXEL_ENDCAP_Z[np.argmin(np.abs(PIXEL_ENDCAP_Z - median_abs_z))])
-            else:
-                nearest_z = float(STRIP_ENDCAP_Z[np.argmin(np.abs(STRIP_ENDCAP_Z - median_abs_z))])
+        vid_int = int(vid)
+        if vid_int in VOLUME_MAP:
+            vm = VOLUME_MAP[vid_int]
+            is_barrel = (vm['region'] == 'barrel')
+            is_endcap = (vm['region'] == 'endcap')
+            barrel_type = vm['type'] if is_barrel else None
+            endcap_type = vm['type'] if is_endcap else None
+            detname = vm['type'] if is_barrel else (vm['type'] + 'Endcap')
+        else:
+            print(f"Warning: volume_id {vid_int} not present in VOLUME_MAP; classifying as 'Unknown'")
+            is_barrel = False
+            is_endcap = False
+            barrel_type = None
+            endcap_type = None
+            detname = 'Unknown'
 
         vol_info[int(vid)] = {
             'detname': detname,
-            'median_r': median_r,
-            'median_abs_z': median_abs_z,
             'n_layers': n_layers,
             'is_barrel': is_barrel,
             'is_endcap': is_endcap,
             'barrel_type': barrel_type,
             'endcap_type': endcap_type,
-            'disk_z': nearest_z,
         }
 
-    # If possible, infer the primary particle (by majority of measurement hits)
+    # Infer primary particle (single-particle run assumed) and compute Pt/eta from hit momenta if available
     particle_summary = None
-    measurement_orig_indices = [r['orig_index'] for r in rows if r['module_id'] != 0]
-    if len(measurement_orig_indices) > 0 and pid_hit_arr is not None:
-        measurement_mask_orig = np.zeros(len(vol), dtype=bool)
-        measurement_mask_orig[measurement_orig_indices] = True
-        sel_pids = pid_hit_arr[measurement_mask_orig]
-        if sel_pids.size > 0:
+    measurement_rows = [r for r in rows if r['module_id'] != 0]
+    if len(measurement_rows) > 0:
+        # determine primary particle id if particle_id branch exists
+        primary_pid = None
+        if 'particle_id' in t.keys():
+            pid_arr = np.asarray(t['particle_id'].array())
+            meas_indices = [r['orig_index'] for r in measurement_rows]
+            sel_pids = pid_arr[meas_indices]
             unique_pids, counts = np.unique(sel_pids, return_counts=True)
-            primary_idx = np.argmax(counts)
-            primary_pid = int(unique_pids[primary_idx])
-            # prefer per-hit momentum if present
-            if hit_tpx is not None:
-                sel_px = hit_tpx[measurement_mask_orig]
-                sel_py = hit_tpy[measurement_mask_orig]
-                sel_pz = hit_tpz[measurement_mask_orig]
-                mask_pid = (sel_pids == primary_pid)
-                avg_px = float(np.mean(sel_px[mask_pid]))
-                avg_py = float(np.mean(sel_py[mask_pid]))
-                avg_pz = float(np.mean(sel_pz[mask_pid]))
-            elif particles_map is not None and primary_pid in particles_map:
-                avg_px, avg_py, avg_pz = particles_map[primary_pid]
-            else:
-                avg_px = avg_py = avg_pz = None
+            if unique_pids.size > 0:
+                primary_pid = int(unique_pids[np.argmax(counts)])
 
-            if avg_px is not None:
-                pt_val = float(np.hypot(avg_px, avg_py))
-                p_val = float(np.sqrt(avg_px**2 + avg_py**2 + avg_pz**2))
-                if p_val > abs(avg_pz):
-                    eta_val = 0.5 * np.log((p_val + avg_pz) / (p_val - avg_pz))
+        # compute average momentum from hits if momentum branches are present
+        if has_momentum_in_hits:
+            # lazy-read momentum arrays now that we know which indices we will use
+            hit_tpx = np.asarray(t['tpx'].array())
+            hit_tpy = np.asarray(t['tpy'].array())
+            hit_tpz = np.asarray(t['tpz'].array())
+            meas_indices = [r['orig_index'] for r in measurement_rows]
+            sel_px = hit_tpx[meas_indices]
+            sel_py = hit_tpy[meas_indices]
+            sel_pz = hit_tpz[meas_indices]
+            avg_px = float(np.mean(sel_px))
+            avg_py = float(np.mean(sel_py))
+            avg_pz = float(np.mean(sel_pz))
+            pt_val = float(np.hypot(avg_px, avg_py))
+            p_val = float(np.sqrt(avg_px**2 + avg_py**2 + avg_pz**2))
+            # robust pseudorapidity calculation: avoid division by zero or log(0).
+            # If p == |pz| (i.e. pt == 0) then eta should be signed infinity when
+            # pz != 0 (particle going exactly along +z/-z) and NaN only if the
+            # momentum is zero/invalid. Use a small epsilon for numerical safety.
+            eps = 1e-12
+            if p_val > abs(avg_pz) + eps:
+                eta_val = 0.5 * np.log((p_val + avg_pz) / (p_val - avg_pz))
+            else:
+                if pt_val == 0.0 and avg_pz != 0.0:
+                    eta_val = float('inf') if avg_pz > 0.0 else float('-inf')
                 else:
                     eta_val = float('nan')
-                particle_summary = {
-                    'particle_id': primary_pid,
-                    'n_hits': int(counts[primary_idx]),
-                    'pt': pt_val,
-                    'eta': eta_val,
-                }
+            particle_summary = {
+                'particle_id': primary_pid if primary_pid is not None else 0,
+                'n_hits': len(measurement_rows),
+                'pt': pt_val,
+                'eta': eta_val,
+            }
+        else:
+            particle_summary = {
+                'particle_id': primary_pid if primary_pid is not None else 0,
+                'n_hits': len(measurement_rows),
+                'pt': None,
+                'eta': None,
+            }
 
     # Build summary text
-    # Build per-volume lines in the same order as the per-measurement table
+
     per_vol_lines = []
     seen_vids = []
     display_rows = [r for r in rows if r['module_id'] != 0]
@@ -280,7 +232,7 @@ def main():
         if vid not in seen_vids:
             seen_vids.append(vid)
 
-    # totals are intentionally omitted; per-volume summary follows measurement order
+   
     for vid in seen_vids:
         info = vol_info[int(vid)]
         det = info['detname']
@@ -300,7 +252,10 @@ def main():
     summary_lines = []
     if particle_summary is not None:
         summary_lines.append(f"Primary particle id={particle_summary['particle_id']} (contributing hits={particle_summary['n_hits']})")
-        summary_lines.append(f"  Pt = {particle_summary['pt']:.3f} , eta = {particle_summary['eta']:.3f}")
+        # Only display Pt/eta if we actually computed momentum values.
+        if particle_summary.get('pt') is not None:
+            # eta may be inf/-inf/nan; format will render these sensibly.
+            summary_lines.append(f"  Pt = {particle_summary['pt']:.3f} , eta = {particle_summary['eta']:.3f}")
     summary_lines.append(f"Total unique layers entered: {total_unique_layers}")
     
 

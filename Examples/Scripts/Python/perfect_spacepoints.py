@@ -256,8 +256,14 @@ def runPerfectSpacepoints(
         trackingGeometry,
         field,
         rnd=rnd,
-        enableInteractions=physics["enableInteractions"],
+        enableInteractions=physics['enableInteractions'],
         pMin=pMin,
+        # forward optional simulation hyperparameters from JSON if present
+        maxSteps=sim.get("maxSteps", None),
+        loopProtection=sim.get("loopProtection", None),
+        loopFraction=sim.get("loopFraction", None),
+        # pass debug interval from logging config (if present)
+        debugStepInterval=logging_cfg.get("n", None),
         outputDirRoot=outputDir,
     )
 
@@ -534,8 +540,7 @@ def runPerfectSpacepoints(
         logLevel=getattr(acts.logging, logging_cfg["level"]),
     )
 
-    # Additionally, enable the optional detailed matching tree without changing
-    # global defaults: create a small separate performance file with
+
     # writeMatchingDetails=True so we get the `matchingdetails` TTree.
     s.addWriter(
         acts.examples.TrackFinderPerformanceWriter(
@@ -549,6 +554,7 @@ def runPerfectSpacepoints(
             writeMatchingDetails=True,
         )
     )
+
 
     return s
 

@@ -160,6 +160,16 @@ struct FatrasSimulationT final : ActsExamples::detail::FatrasSimulation {
     simulation.charged.pathLimit = cfg.pathLimit;
     simulation.neutral.maxStepSize = cfg.maxStepSize;
     simulation.neutral.pathLimit = cfg.pathLimit;
+  // debug printing interval for per-step diagnostics
+  simulation.charged.debugStepInterval = cfg.debugStepInterval;
+  simulation.neutral.debugStepInterval = cfg.debugStepInterval;
+    // propagate simulation-level loop protection and step limits
+    simulation.charged.maxSteps = cfg.maxSteps;
+    simulation.charged.loopProtection = cfg.loopProtection;
+    simulation.charged.loopFraction = cfg.loopFraction;
+    simulation.neutral.maxSteps = cfg.maxSteps;
+    simulation.neutral.loopProtection = cfg.loopProtection;
+    simulation.neutral.loopFraction = cfg.loopFraction;
   }
   ~FatrasSimulationT() final = default;
 
@@ -202,6 +212,8 @@ ActsExamples::FatrasSimulation::FatrasSimulation(Config cfg,
 
   // construct the simulation for the specific magnetic field
   m_sim = std::make_unique<FatrasSimulationT>(m_cfg, lvl);
+
+  ACTS_DEBUG("debugStepInterval: " << m_cfg.debugStepInterval);
 
   m_inputParticles.initialize(m_cfg.inputParticles);
   m_outputParticles.initialize(m_cfg.outputParticles);

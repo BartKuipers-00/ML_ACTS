@@ -77,6 +77,16 @@ class FatrasSimulation final : public IAlgorithm {
     double maxStepSize = 1 * Acts::UnitConstants::m;
     /// Absolute maximum path length
     double pathLimit = 30 * Acts::UnitConstants::m;
+  /// Maximum number of propagator steps per propagate() call
+  std::uint32_t maxSteps = 1000u;
+  /// Loop protection for propagator (avoid infinite spirals)
+  bool loopProtection = true;
+  /// Allowed loop fraction (1.0 == full loop)
+  double loopFraction = 0.5;
+
+    /// Debug: interval (in propagator steps) at which to print particle state
+    /// when logging level is DEBUG. 0 disables periodic debug printing.
+    std::uint32_t debugStepInterval = 0u;
 
     /// Expected average number of hits generated per particle.
     ///
