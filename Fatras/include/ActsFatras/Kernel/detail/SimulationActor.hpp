@@ -50,6 +50,10 @@ struct SimulationActor {
   hit_surface_selector_t selectHitSurface;
   /// Debug: interval (in propagator steps) at which to print particle state.    (Bart)
   std::uint32_t debugStepInterval = 0u;
+  /// Internal counter of how many times this actor was invoked for the
+  /// current simulate() call. This counts actor invocations (surfaces/steps)
+  /// which is what users expect when configuring a per-N-step debug print.
+  mutable std::uint32_t invocationCounter = 0u;
   /// Initial particle state.
   Particle initialParticle;
 
@@ -99,36 +103,55 @@ struct SimulationActor {
     // everything, e.g. any interactions that could modify the state.
     result.particle = makeParticle(result.particle, state, stepper, navigator);
 
-    // Optional debug print of particle state every debugStepInterval steps.   /(BART)
+
     if (debugStepInterval > 0u) {
-      // step count is stored in the stepper state
-      const auto stepCount = state.stepping.nSteps;
-      if (stepCount != 0u && (stepCount % debugStepInterval) == 0u) {
-        // only print through logger if DEBUG (or lower) is enabled
+      const auto invocation = ++invocationCounter;
+      if (invocation != 0u && (invocation % debugStepInterval) == 0u) {
+        // Build the debug string unconditionally for this invocation so we can
+        // choose the most appropriate log level below. We prefer to log at
+        // DEBUG (no duplicate output), but fall back to INFO if DEBUG is not
+        // enabled so the message remains visible in runs where only INFO is
+        // configured.
+        std::ostringstream os;
+  const auto &p = result.particle;
+        // position and kinematics
+        auto pos = p.fourPosition();
+        double px = p.fourMomentum().x();
+        double py = p.fourMomentum().y();
+        double pz = p.fourMomentum().z();
+        double qop = p.qOverP();
+        double x = pos.x();
+        double y = pos.y();
+        double z = pos.z();
+        double r = std::hypot(x, y);
+        os << "[FATRAS DEBUG] inv=" << invocation
+           << " pid=" << p.particleId().value()
+           << " x=" << x << " y=" << y << " z=" << z << " r=" << r
+           << " p=(" << px << "," << py << "," << pz << ")"
+           << " q/p=" << qop;
+
+        // indicate whether the particle is currently at a surface. 
+        if (navigator.currentSurface(state.navigation) != nullptr) {
+          const auto *curSurface = navigator.currentSurface(state.navigation);
+          const auto geoIdVal = curSurface->geometryId().value();
+          // operator() should be const; safe to call here to report selection
+          const bool sel = selectHitSurface(*curSurface);
+          os << " onSurface=1 geo=" << geoIdVal << " sel=" << sel;
+        } else {
+          os << " onSurface=0";
+        }
+
         if (logger.doPrint(Acts::Logging::Level::DEBUG)) {
-          std::ostringstream os;
-       const auto &p = result.particle;
-       // position and kinematics
-       auto pos = p.fourPosition();
-       double px = p.fourMomentum().x();
-       double py = p.fourMomentum().y();
-       double pz = p.fourMomentum().z();
-       double qop = p.qOverP();
-       double x = pos.x();
-       double y = pos.y();
-       double z = pos.z();
-       double r = std::hypot(x, y);
-       os << "[FATRAS DEBUG] step=" << stepCount
-         << " pid=" << p.particleId().value() // compact numeric id
-         << " x=" << x << " y=" << y << " z=" << z << " r=" << r
-         << " p=(" << px << "," << py << "," << pz << ")"
-         << " q/p=" << qop;
           logger.log(Acts::Logging::Level::DEBUG, os.str());
+        } else if (logger.doPrint(Acts::Logging::Level::INFO)) {
+          // Fallback: print at INFO only if DEBUG is not enabled. This avoids
+          // duplicate output when users already request DEBUG verbosity.
+          logger.log(Acts::Logging::Level::INFO, os.str());
         }
       }
     }
 
-    // decay check. needs to happen at every step, not just on surfaces.
+  // decay check. needs to happen at every step, not just on surfaces.
     if (std::isfinite(result.properTimeLimit) &&
         (result.properTimeLimit - result.particle.properTime() <
          result.properTimeLimit * properTimeRelativeTolerance)) {
@@ -175,6 +198,7 @@ struct SimulationActor {
     }
     const Acts::Surface &surface = *navigator.currentSurface(state.navigation);
 
+    
     // we need the particle state before and after the interaction for the hit
     // creation. create a copy since the particle will be modified in-place.
     const Particle before = result.particle;
@@ -208,14 +232,51 @@ struct SimulationActor {
     Particle &after = result.particle;
 
     // store results of this interaction step, including potential hits
-    if (selectHitSurface(surface)) {
-      result.hits.emplace_back(
-          surface.geometryId(), before.particleId(),
-          // the interaction could potentially modify the particle position
-          0.5 * (before.fourPosition() + after.fourPosition()),
-          before.fourMomentum(), after.fourMomentum(), result.hits.size());
+    // Diagnose selection: compute surface type flags and log the selector
+    // decision at DEBUG level to help determine why some crossings do not
+    // produce hits (e.g. return leg suppressed by configuration).
+    {
+      const bool isSensitive = surface.associatedDetectorElement() != nullptr;
+      const bool isMaterial = surface.surfaceMaterial() != nullptr;
+      const bool isPassive = !(isSensitive || isMaterial);
+      const bool selected = selectHitSurface(surface);
 
-      after.setNumberOfHits(result.hits.size());
+      if (logger.doPrint(Acts::Logging::Level::DEBUG)) {
+        std::ostringstream os2;
+        const auto gid = surface.geometryId();
+        os2 << "[FATRAS SELECT] geo=" << surface.geometryId().value()
+            << " vol=" << gid.volume() << " lay=" << gid.layer()
+            << " app=" << gid.approach() << " bnd=" << gid.boundary()
+            << " sens=" << gid.sensitive()
+            << " sensitive=" << isSensitive
+            << " material=" << isMaterial
+            << " passive=" << isPassive
+            << " selected=" << selected
+            << " pid=" << before.particleId().value();
+        // include radius for quick spatial context
+        const auto &bp = before.fourPosition();
+        os2 << " r=" << std::hypot(bp.x(), bp.y());
+        // incidence: dot(normal, direction) -> positive/negative indicates
+        // which side the particle comes from; log the raw value for diagnosis
+        try {
+          auto normal = surface.normal(state.geoContext, before.position(),
+                                       before.direction());
+          os2 << " inc=" << normal.dot(before.direction());
+        } catch (...) {
+          // surface.normal may throw in exotic cases; ignore for diagnostics
+        }
+        logger.log(Acts::Logging::Level::DEBUG, os2.str());
+      }
+
+      if (selected) {
+        result.hits.emplace_back(
+            surface.geometryId(), before.particleId(),
+            // the interaction could potentially modify the particle position
+            0.5 * (before.fourPosition() + after.fourPosition()),
+            before.fourMomentum(), after.fourMomentum(), result.hits.size());
+
+        after.setNumberOfHits(result.hits.size());
+      }
     }
 
     if (after.absoluteMomentum() == 0.0) {

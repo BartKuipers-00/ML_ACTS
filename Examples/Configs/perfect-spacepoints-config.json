@@ -17,8 +17,8 @@
         "transverse": true
       },
       "eta": {
-        "min": -0.01,
-        "max": 0.01,
+        "min": -0.2,
+        "max": -0.1,
         "uniform": true
       },
       "phi": {
@@ -172,8 +172,8 @@
     "csvSubdir": "csv"
   },
   "logging": {
-    "comment": "Logging configuration: INFO, DEBI",
-    "level": "DEBUG",
-    "n": 5
+    "comment": "Logging configuration: INFO, DEBUG",
+    "level": "VERBOSE",
+    "n": 1
   }
 }

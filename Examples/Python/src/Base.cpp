@@ -243,7 +243,10 @@ void addLogging(Acts::Python::Context& ctx) {
     } catch (const std::exception& e) {
       std::string what = e.what();
       if (what.find("ACTS_LOG_FAILURE_THRESHOLD") != std::string::npos) {
-        py::set_error(exc, e.what());
+        // Older/newer pybind11 versions may not provide py::set_error.
+        // Fall back to setting a RuntimeError with the message so Python
+        // receives a usable exception.
+        PyErr_SetString(PyExc_RuntimeError, what.c_str());
       } else {
         std::rethrow_exception(p);
       }

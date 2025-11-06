@@ -118,6 +118,9 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
   // the list of valid intersection
   boost::container::small_vector<SurfaceIntersection, 10> sIntersections;
 
+  // Local logger for debug prints in this function scope
+  ACTS_LOCAL_LOGGER(::Acts::getDefaultLogger("Layer", ::Acts::Logging::DEBUG));
+
   // fast exit - there is nothing to
   if (!m_surfaceArray || !m_approachDescriptor) {
     return sIntersections;
@@ -169,6 +172,12 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
         detail::checkPathLength(sfi.pathLength(), nearLimit, farLimit) &&
         isUnique(sfi)) {
       sIntersections.push_back(sfi);
+      // Small debug hint for instrumentation: print accepted surface
+      // candidates under ACTS_DEBUG so this can be enabled at runtime.
+      ACTS_DEBUG("Layer::compatibleSurfaces: accepted candidate "
+                 << sfi.surface().geometryId() << " idx=" << sfi.index()
+                 << " path=" << sfi.pathLength()
+                 << " material=" << (sfi.surface().surfaceMaterial() != nullptr));
     }
   };
 

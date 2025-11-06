@@ -262,7 +262,6 @@ def runPerfectSpacepoints(
         maxSteps=sim.get("maxSteps", None),
         loopProtection=sim.get("loopProtection", None),
         loopFraction=sim.get("loopFraction", None),
-        # pass debug interval from logging config (if present)
         debugStepInterval=logging_cfg.get("n", None),
         outputDirRoot=outputDir,
     )
@@ -496,13 +495,8 @@ def runPerfectSpacepoints(
             trackSelectorCfg=trkSelCfg,
             seedDeduplication=ckf["seedDeduplication"],
             stayOnSeed=ckf["stayOnSeed"],
-        ),
-        # optional loop-protection overrides (only pass if explicitly set)
-        **({} if loop_protection is None and loop_fraction is None else {
-            **({} if loop_protection is None else {"loopProtection": loop_protection}),
-            **({} if loop_fraction is None else {"loopFraction": loop_fraction}),
-        }),
-    )
+        ), )
+        
     s.addAlgorithm(trackFinder)
     s.addWhiteboardAlias("tracks", trackFinder.config.outputTracks)
 

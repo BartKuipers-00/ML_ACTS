@@ -167,7 +167,10 @@ def main():
             'endcap_type': endcap_type,
         }
 
-    # Infer primary particle (single-particle run assumed) and compute Pt/eta from hit momenta if available
+    # Infer primary particle (single-particle run assumed) and determine Pt/eta.
+    # Prefer authoritative pt from a nearby `particles.root` file (same directory
+    # as the hits file). If not available, fall back to the original per-hit
+    # aggregation.
     particle_summary = None
     measurement_rows = [r for r in rows if r['module_id'] != 0]
     if len(measurement_rows) > 0:
@@ -181,46 +184,101 @@ def main():
             if unique_pids.size > 0:
                 primary_pid = int(unique_pids[np.argmax(counts)])
 
-        # compute average momentum from hits if momentum branches are present
-        if has_momentum_in_hits:
-            # lazy-read momentum arrays now that we know which indices we will use
-            hit_tpx = np.asarray(t['tpx'].array())
-            hit_tpy = np.asarray(t['tpy'].array())
-            hit_tpz = np.asarray(t['tpz'].array())
-            meas_indices = [r['orig_index'] for r in measurement_rows]
-            sel_px = hit_tpx[meas_indices]
-            sel_py = hit_tpy[meas_indices]
-            sel_pz = hit_tpz[meas_indices]
-            avg_px = float(np.mean(sel_px))
-            avg_py = float(np.mean(sel_py))
-            avg_pz = float(np.mean(sel_pz))
-            pt_val = float(np.hypot(avg_px, avg_py))
-            p_val = float(np.sqrt(avg_px**2 + avg_py**2 + avg_pz**2))
-            # robust pseudorapidity calculation: avoid division by zero or log(0).
-            # If p == |pz| (i.e. pt == 0) then eta should be signed infinity when
-            # pz != 0 (particle going exactly along +z/-z) and NaN only if the
-            # momentum is zero/invalid. Use a small epsilon for numerical safety.
-            eps = 1e-12
-            if p_val > abs(avg_pz) + eps:
-                eta_val = 0.5 * np.log((p_val + avg_pz) / (p_val - avg_pz))
-            else:
-                if pt_val == 0.0 and avg_pz != 0.0:
-                    eta_val = float('inf') if avg_pz > 0.0 else float('-inf')
-                else:
-                    eta_val = float('nan')
+        # Try to open a particles.root file in the same directory as hits
+        particle_pt = None
+        particle_eta = None
+        try:
+            particles_path = hits_path.parent / 'particles.root'
+            if particles_path.exists():
+                    pfile = uproot.open(str(particles_path))
+                    # prefer deterministic names found in the example file
+                    # (example: 'particles;1' with branches 'particle_id', 'pt', 'eta')
+                    p_names = list(pfile.keys())
+                    chosen_p = None
+                    for name in ('particles;1', 'particles'):
+                        if name in p_names:
+                            chosen_p = name
+                            break
+
+                    if chosen_p is not None:
+                        ptree = pfile[chosen_p]
+                        pkeys = set(ptree.keys())
+                        # deterministic branch names from the example
+                        pid_branch = 'particle_id' if 'particle_id' in pkeys else None
+                        pt_branch = 'pt' if 'pt' in pkeys else None
+                        eta_branch = 'eta' if 'eta' in pkeys else None
+                        # fallback to some alternatives if the deterministic names are not present
+                        if pid_branch is None:
+                            pid_branch = next((b for b in ('id', 'pid') if b in pkeys), None)
+                        if pt_branch is None:
+                            pt_branch = next((b for b in ('p_t', 'pT') if b in pkeys), None)
+                        if eta_branch is None:
+                            eta_branch = next((b for b in ('pseudorapidity',) if b in pkeys), None)
+
+                        if pid_branch is not None and pt_branch is not None and primary_pid is not None:
+                            part_pid_arr = np.asarray(ptree[pid_branch].array())
+                            part_pt_arr = np.asarray(ptree[pt_branch].array())
+                            # find first matching entry for the primary pid
+                            matches = np.where(part_pid_arr == primary_pid)[0]
+                            if matches.size > 0:
+                                particle_pt = float(part_pt_arr[matches[0]])
+                                if eta_branch is not None:
+                                    particle_eta = float(np.asarray(ptree[eta_branch].array())[matches[0]])
+        except Exception:
+            # Opening or reading particles.root failed — ignore and fall back.
+            particle_pt = None
+            particle_eta = None
+
+        # If we found a pt in particles.root, use it. Otherwise fall back to
+        # the original per-hit averaging (vector-averaging of px/py/pz).
+        if particle_pt is not None:
             particle_summary = {
                 'particle_id': primary_pid if primary_pid is not None else 0,
                 'n_hits': len(measurement_rows),
-                'pt': pt_val,
-                'eta': eta_val,
+                'pt': particle_pt,
+                'eta': particle_eta,
             }
         else:
-            particle_summary = {
-                'particle_id': primary_pid if primary_pid is not None else 0,
-                'n_hits': len(measurement_rows),
-                'pt': None,
-                'eta': None,
-            }
+            # compute average momentum from hits if momentum branches are present
+            if has_momentum_in_hits:
+                # lazy-read momentum arrays now that we know which indices we will use
+                hit_tpx = np.asarray(t['tpx'].array())
+                hit_tpy = np.asarray(t['tpy'].array())
+                hit_tpz = np.asarray(t['tpz'].array())
+                meas_indices = [r['orig_index'] for r in measurement_rows]
+                sel_px = hit_tpx[meas_indices]
+                sel_py = hit_tpy[meas_indices]
+                sel_pz = hit_tpz[meas_indices]
+                avg_px = float(np.mean(sel_px))
+                avg_py = float(np.mean(sel_py))
+                avg_pz = float(np.mean(sel_pz))
+                pt_val = float(np.hypot(avg_px, avg_py))
+                p_val = float(np.sqrt(avg_px**2 + avg_py**2 + avg_pz**2))
+                # robust pseudorapidity calculation: avoid division by zero or log(0).
+                # If p == |pz| (i.e. pt == 0) then eta should be signed infinity when
+                # pz != 0 (particle going exactly along +z/-z) and NaN only if the
+                # momentum is zero/invalid. Use a small epsilon for numerical safety.
+                eps = 1e-12
+                if p_val > abs(avg_pz) + eps:
+                    eta_val = 0.5 * np.log((p_val + avg_pz) / (p_val - avg_pz))
+                else:
+                    if pt_val == 0.0 and avg_pz != 0.0:
+                        eta_val = float('inf') if avg_pz > 0.0 else float('-inf')
+                    else:
+                        eta_val = float('nan')
+                particle_summary = {
+                    'particle_id': primary_pid if primary_pid is not None else 0,
+                    'n_hits': len(measurement_rows),
+                    'pt': pt_val,
+                    'eta': eta_val,
+                }
+            else:
+                particle_summary = {
+                    'particle_id': primary_pid if primary_pid is not None else 0,
+                    'n_hits': len(measurement_rows),
+                    'pt': None,
+                    'eta': None,
+                }
 
     # Build summary text
 
@@ -291,12 +349,6 @@ def main():
             ]
             f.write(' '.join(parts) + '\n')
 
-    # Print short confirmation
-    print('\n'.join(summary_lines))
-    print('\nPer-volume summary:')
-    for l in per_vol_lines:
-        print(' ', l)
-    print('\nWrote:', txt_path.resolve())
 
 
 if __name__ == '__main__':

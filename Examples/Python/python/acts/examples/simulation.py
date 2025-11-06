@@ -517,6 +517,7 @@ def addFatras(
             **({} if maxSteps is None else {"maxSteps": maxSteps}),
             **({} if loopProtection is None else {"loopProtection": loopProtection}),
             **({} if loopFraction is None else {"loopFraction": loopFraction}),
+            **({} if debugStepInterval is None else {"debugStepInterval": debugStepInterval}),
         )
     )
 
