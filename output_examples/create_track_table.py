@@ -229,58 +229,7 @@ def main():
             particle_pt = None
             particle_eta = None
 
-        # If we found a pt in particles.root, use it. Otherwise fall back to
-        # the original per-hit averaging (vector-averaging of px/py/pz).
-        if particle_pt is not None:
-            particle_summary = {
-                'particle_id': primary_pid if primary_pid is not None else 0,
-                'n_hits': len(measurement_rows),
-                'pt': particle_pt,
-                'eta': particle_eta,
-            }
-        else:
-            # compute average momentum from hits if momentum branches are present
-            if has_momentum_in_hits:
-                # lazy-read momentum arrays now that we know which indices we will use
-                hit_tpx = np.asarray(t['tpx'].array())
-                hit_tpy = np.asarray(t['tpy'].array())
-                hit_tpz = np.asarray(t['tpz'].array())
-                meas_indices = [r['orig_index'] for r in measurement_rows]
-                sel_px = hit_tpx[meas_indices]
-                sel_py = hit_tpy[meas_indices]
-                sel_pz = hit_tpz[meas_indices]
-                avg_px = float(np.mean(sel_px))
-                avg_py = float(np.mean(sel_py))
-                avg_pz = float(np.mean(sel_pz))
-                pt_val = float(np.hypot(avg_px, avg_py))
-                p_val = float(np.sqrt(avg_px**2 + avg_py**2 + avg_pz**2))
-                # robust pseudorapidity calculation: avoid division by zero or log(0).
-                # If p == |pz| (i.e. pt == 0) then eta should be signed infinity when
-                # pz != 0 (particle going exactly along +z/-z) and NaN only if the
-                # momentum is zero/invalid. Use a small epsilon for numerical safety.
-                eps = 1e-12
-                if p_val > abs(avg_pz) + eps:
-                    eta_val = 0.5 * np.log((p_val + avg_pz) / (p_val - avg_pz))
-                else:
-                    if pt_val == 0.0 and avg_pz != 0.0:
-                        eta_val = float('inf') if avg_pz > 0.0 else float('-inf')
-                    else:
-                        eta_val = float('nan')
-                particle_summary = {
-                    'particle_id': primary_pid if primary_pid is not None else 0,
-                    'n_hits': len(measurement_rows),
-                    'pt': pt_val,
-                    'eta': eta_val,
-                }
-            else:
-                particle_summary = {
-                    'particle_id': primary_pid if primary_pid is not None else 0,
-                    'n_hits': len(measurement_rows),
-                    'pt': None,
-                    'eta': None,
-                }
-
-    # Build summary text
+      
 
     per_vol_lines = []
     seen_vids = []

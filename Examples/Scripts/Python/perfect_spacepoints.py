@@ -495,8 +495,8 @@ def runPerfectSpacepoints(
             trackSelectorCfg=trkSelCfg,
             seedDeduplication=ckf["seedDeduplication"],
             stayOnSeed=ckf["stayOnSeed"],
-        ), )
-        
+        ),
+    )
     s.addAlgorithm(trackFinder)
     s.addWhiteboardAlias("tracks", trackFinder.config.outputTracks)
 

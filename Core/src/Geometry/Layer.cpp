@@ -118,8 +118,9 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
   // the list of valid intersection
   boost::container::small_vector<SurfaceIntersection, 10> sIntersections;
 
-  // Local logger for debug prints in this function scope
-  ACTS_LOCAL_LOGGER(::Acts::getDefaultLogger("Layer", ::Acts::Logging::DEBUG));
+  // Provide a local logger so ACTS_DEBUG/VERBOSE macros can be used in this
+  // function scope (the logging macros expect a callable `logger()` in scope).
+  ACTS_LOCAL_LOGGER(getDefaultLogger("Layer", Logging::Level::DEBUG));
 
   // fast exit - there is nothing to
   if (!m_surfaceArray || !m_approachDescriptor) {

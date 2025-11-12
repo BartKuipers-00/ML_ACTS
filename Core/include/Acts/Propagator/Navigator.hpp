@@ -196,11 +196,6 @@ class Navigator {
 
     NavigationStream stream;
 
-  /// track last seen direction to detect flips during navigation and
-  /// re-resolve layer candidates when propagation direction changes
-  Vector3 lastDirection = Vector3::Zero();
-  bool lastDirectionSet = false;
-
     void resetAfterLayerSwitch() {
       navSurfaces.clear();
       navSurfaceIndex.reset();
@@ -420,26 +415,6 @@ class Navigator {
     }
 
     ACTS_VERBOSE(volInfo(state) << "Entering Navigator::nextTarget.");
-
-    // Detect propagation direction flip: if we already are in layerTarget and
-    // the propagation direction reversed (dot < 0), clear the cached
-    // navLayers so resolveLayers() will be called again with the new
-    // direction. We update lastDirection afterwards so subsequent calls are
-    // compared to current direction.
-    if (state.lastDirectionSet) {
-      if (state.navigationStage == Stage::layerTarget &&
-          state.navLayerIndex.has_value()) {
-        if (state.lastDirection.dot(direction) < 0) {
-          ACTS_VERBOSE(volInfo(state)
-                       << "Propagation direction flipped. Re-resolving "
-                          "layer candidates.");
-          state.navLayers.clear();
-          state.navLayerIndex.reset();
-        }
-      }
-    }
-    state.lastDirection = direction;
-    state.lastDirectionSet = true;
 
     auto tryGetNextTarget = [&]() -> NavigationTarget {
       // Try targeting the surfaces - then layers - then boundaries

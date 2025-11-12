@@ -12,7 +12,7 @@
     "particleGun": {
       "momentum": {
         "_comment": "Units are in GeV",
-        "min": 0.4,
+        "min": 0.5,
         "max": 0.5,
         "transverse": true
       },
