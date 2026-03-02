@@ -87,7 +87,7 @@ jobs:
       - name: Package build
         run: tar czf build.tar.gz -C build --exclude "*.o" --exclude "bin/ActsUnitTest*" --exclude "bin/ActsIntegrationTest*" .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: acts-linux-ubuntu
           path: build.tar.gz
@@ -213,7 +213,7 @@ jobs:
           mkdir -p physmon
           cat physmon/summary.md >> $GITHUB_STEP_SUMMARY
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: physmon
@@ -390,7 +390,7 @@ jobs:
       - name: Install
         run: cmake --build build --target install
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: acts-macos
           path: ${{ env.INSTALL_DIR }}
@@ -490,7 +490,7 @@ jobs:
 
       - name: Upload Artifact
         if: ${{ steps.build.outcome == 'failure' && github.event_name == 'pull_request' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: comment-50-external-failure.md
           path: comment-50-external-failure.md
