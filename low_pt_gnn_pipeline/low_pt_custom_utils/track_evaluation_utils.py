@@ -18,6 +18,7 @@ from pathlib import Path
 import json
 import numpy as np
 import pandas as pd
+import scipy.stats
 import torch
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -36,6 +37,8 @@ try:
     HAS_ATLASIFY = True
 except ImportError:
     HAS_ATLASIFY = False
+
+from low_pt_custom_utils.plot_data_utils import save_plot_data_json
 
 # PDG code → merged species name (charge conjugates merged)
 PDG_TO_SPECIES = {
@@ -424,7 +427,7 @@ def run_evaluation(dataset_name, eval_config):
     return evaluated_events, summary, summary_text
 
 
-def save_evaluation_results(evaluated_events, summary, summary_text, dataset_name, output_dir):
+def save_evaluation_results(evaluated_events, summary, summary_text, dataset_name, output_dir, debug_files=True):
     """
     Save evaluation results to disk.
 
@@ -434,36 +437,48 @@ def save_evaluation_results(evaluated_events, summary, summary_text, dataset_nam
         summary_text: formatted text summary
         dataset_name: "trainset", "valset", or "testset"
         output_dir: Path to output directory
+        debug_files: if False, skip large per-event DataFrames (matching_df, particles)
+                     and only write the compact summary JSON and text file.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Matching DataFrame
-    evaluated_events.to_csv(output_dir / f"matching_df_{dataset_name}.csv", index=False)
+    # Large per-event DataFrames — only written in debug mode
+    if debug_files:
+        evaluated_events.to_csv(output_dir / f"matching_df_{dataset_name}.csv", index=False)
 
-    # Summary JSON
+        particles = evaluated_events[evaluated_events["is_reconstructable"]]
+        particles_plot = particles.copy()
+        particles_plot["is_reconstructed"] = particles_plot.groupby(
+            ["event_id", "particle_id"]
+        )["is_reconstructed"].transform("any")
+        particles_plot = particles_plot.drop_duplicates(subset=["event_id", "particle_id"])
+        particles_plot.to_csv(output_dir / f"particles_{dataset_name}.csv", index=False)
+
+    # Summary JSON — always written (tiny, contains the key metrics)
     with open(output_dir / f"summary_{dataset_name}.json", 'w') as f:
         json.dump(summary, f, indent=2)
 
-    # Summary text
+    # Summary text — always written
     with open(output_dir / f"results_summary_{summary.get('matching_style', 'ATLAS')}_{dataset_name}.txt", 'w') as f:
         f.write(summary_text)
-
-    # Particles DataFrame for plotting
-    particles = evaluated_events[evaluated_events["is_reconstructable"]]
-    particles_plot = particles.copy()
-    # A particle is reconstructed if ANY of its matching rows has is_reconstructed=True
-    # (mirrors the overall efficiency calculation)
-    particles_plot["is_reconstructed"] = particles_plot.groupby(
-        ["event_id", "particle_id"]
-    )["is_reconstructed"].transform("any")
-    particles_plot = particles_plot.drop_duplicates(subset=["event_id", "particle_id"])
-    particles_plot.to_csv(output_dir / f"particles_{dataset_name}.csv", index=False)
 
     print(f"Evaluation results saved to: {output_dir}")
 
 
 # ─── Plotting ────────────────────────────────────────────────────────────────
+
+def _clopper_pearson_errors(passed_arr, total_arr, level=0.68):
+    """Clopper-Pearson confidence interval errors for arrays of (passed, total).
+    Returns (lo_err, hi_err) arrays — distances from the central value."""
+    alpha = (1 - level) / 2
+    lo = np.where(passed_arr > 0,
+                  scipy.stats.beta.ppf(alpha, passed_arr, total_arr - passed_arr + 1), 0.0)
+    hi = np.where(passed_arr < total_arr,
+                  scipy.stats.beta.ppf(1 - alpha, passed_arr + 1, total_arr - passed_arr), 1.0)
+    eff = np.where(total_arr > 0, passed_arr / total_arr, np.nan)
+    return np.maximum(0, eff - lo), np.maximum(0, hi - eff)
+
 
 def _get_bins(var, varconf):
     """Determine histogram bins from variable config."""
@@ -512,6 +527,20 @@ def plot_efficiency_vs_variable(particles_df, var, varconf, output_path, summary
     if not species_list:
         species_list = ['All']
 
+    title = f"Track Efficiency vs {var.upper()}"
+    if summary and 'efficiency' in summary:
+        title += f" (Overall: {summary['efficiency']:.3f})"
+
+    plot_data = {
+        "plot_type": "efficiency",
+        "variable": var,
+        "xlabel": varconf.get('x_label', var),
+        "ylabel": "Efficiency",
+        "ylim": varconf.get('y_lim', [0, 1.1]),
+        "title": title,
+        "series": [],
+    }
+
     for species in species_list:
         if species == 'All':
             mask = np.ones(len(particles_df), dtype=bool)
@@ -528,10 +557,9 @@ def plot_efficiency_vs_variable(particles_df, var, varconf, output_path, summary
         reco_vals, _ = np.histogram(reco_x, bins=x_bins)
 
         with np.errstate(divide='ignore', invalid='ignore'):
-            eff = np.true_divide(reco_vals, true_vals)
-            err = np.sqrt(eff * (1 - eff) / true_vals)
-            err[true_vals == 0] = 0
-            eff[true_vals == 0] = np.nan
+            eff = np.where(true_vals > 0, reco_vals / true_vals, np.nan)
+        lo_err, hi_err = _clopper_pearson_errors(reco_vals, true_vals)
+        err = [lo_err, hi_err]
 
         n_reco = int(reco_vals.sum())
         n_true = int(true_vals.sum())
@@ -541,6 +569,11 @@ def plot_efficiency_vs_variable(particles_df, var, varconf, output_path, summary
 
         ax.errorbar(xvals, eff, xerr=xerrs, yerr=err, fmt=marker, color=color,
                     label=label, capsize=3, capthick=1.5, markersize=5)
+        plot_data["series"].append({
+            "label": label, "color": color, "marker": marker,
+            "x": xvals, "xerr": xerrs,
+            "y": eff, "yerr_lo": lo_err, "yerr_hi": hi_err,
+        })
 
     ax.set_xlabel(varconf.get('x_label', var), fontsize=font_sizes['axis_label'])
     ax.set_ylabel('Efficiency', fontsize=font_sizes['axis_label'])
@@ -549,12 +582,10 @@ def plot_efficiency_vs_variable(particles_df, var, varconf, output_path, summary
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=font_sizes['legend'])
     if summary:
-        title = f"Track Efficiency vs {var.upper()}"
-        if 'efficiency' in summary:
-            title += f" (Overall: {summary['efficiency']:.3f})"
         ax.set_title(title, fontsize=font_sizes['title'])
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    save_plot_data_json(output_path, plot_data)
     plt.close()
     print(f"Saved: {output_path}")
 
@@ -590,6 +621,20 @@ def plot_clone_rate_vs_variable(matching_df, var, varconf, output_path, summary=
     if not species_list:
         species_list = ['All']
 
+    title = f"Clone Rate vs {var.upper()}"
+    if summary and 'clone_rate' in summary:
+        title += f" (Overall: {summary['clone_rate']:.3f})"
+
+    plot_data = {
+        "plot_type": "clone_rate",
+        "variable": var,
+        "xlabel": varconf.get('x_label', var),
+        "ylabel": "Clone Rate",
+        "ylim": [0, 1.1],
+        "title": title,
+        "series": [],
+    }
+
     for species in species_list:
         if species == 'All':
             mask = np.ones(len(particle_track_counts), dtype=bool)
@@ -607,15 +652,19 @@ def plot_clone_rate_vs_variable(matching_df, var, varconf, output_path, summary=
         cloned_vals, _ = np.histogram(cloned_x, bins=x_bins)
 
         with np.errstate(divide='ignore', invalid='ignore'):
-            clone_rate = np.true_divide(cloned_vals, all_vals)
-            err = np.sqrt(clone_rate * (1 - clone_rate) / all_vals)
-            err[all_vals == 0] = 0
-            clone_rate[all_vals == 0] = np.nan
+            clone_rate = np.where(all_vals > 0, cloned_vals / all_vals, np.nan)
+        lo_err, hi_err = _clopper_pearson_errors(cloned_vals, all_vals)
+        err = [lo_err, hi_err]
 
         color = SPECIES_COLORS.get(species, 'orange')
         marker = SPECIES_MARKERS.get(species, 'o')
         ax.errorbar(xvals, clone_rate, xerr=xerrs, yerr=err, fmt=marker, color=color,
                     label=species, capsize=3, capthick=1.5, markersize=5)
+        plot_data["series"].append({
+            "label": species, "color": color, "marker": marker,
+            "x": xvals, "xerr": xerrs,
+            "y": clone_rate, "yerr_lo": lo_err, "yerr_hi": hi_err,
+        })
 
     ax.set_xlabel(varconf.get('x_label', var), fontsize=font_sizes['axis_label'])
     ax.set_ylabel('Clone Rate', fontsize=font_sizes['axis_label'])
@@ -623,10 +672,10 @@ def plot_clone_rate_vs_variable(matching_df, var, varconf, output_path, summary=
     ax.tick_params(axis='both', labelsize=font_sizes['tick_label'])
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=font_sizes['legend'])
-    if summary and 'clone_rate' in summary:
-        ax.set_title(f"Clone Rate vs {var.upper()} (Overall: {summary['clone_rate']:.3f})", fontsize=font_sizes['title'])
+    ax.set_title(title, fontsize=font_sizes['title'])
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    save_plot_data_json(output_path, plot_data)
     plt.close()
     print(f"Saved: {output_path}")
 
@@ -661,6 +710,20 @@ def _plot_binned_mean_vs_variable(matching_df, var, varconf, value_col, output_p
     if not species_list:
         species_list = ['All']
 
+    title = f"{title_prefix} vs {var.upper()}"
+    if summary and summary_key in summary:
+        title += f" (Overall: {summary[summary_key]:.3f})"
+
+    plot_data = {
+        "plot_type": title_prefix.lower().replace(' ', '_'),
+        "variable": var,
+        "xlabel": varconf.get('x_label', var),
+        "ylabel": y_label,
+        "ylim": [0, 1.1],
+        "title": title,
+        "series": [],
+    }
+
     for species in species_list:
         if species == 'All':
             mask = np.ones(len(matched), dtype=bool)
@@ -687,6 +750,11 @@ def _plot_binned_mean_vs_variable(matching_df, var, varconf, value_col, output_p
         marker = SPECIES_MARKERS.get(species, 'o')
         ax.errorbar(xvals, mean_vals, xerr=xerrs, yerr=err_vals, fmt=marker, color=color,
                     label=species, capsize=3, capthick=1.5, markersize=5)
+        plot_data["series"].append({
+            "label": species, "color": color, "marker": marker,
+            "x": xvals, "xerr": xerrs,
+            "y": mean_vals, "yerr_lo": err_vals, "yerr_hi": err_vals,
+        })
 
     ax.set_xlabel(varconf.get('x_label', var), fontsize=font_sizes['axis_label'])
     ax.set_ylabel(y_label, fontsize=font_sizes['axis_label'])
@@ -694,11 +762,10 @@ def _plot_binned_mean_vs_variable(matching_df, var, varconf, value_col, output_p
     ax.tick_params(axis='both', labelsize=font_sizes['tick_label'])
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=font_sizes['legend'])
-    if summary and summary_key in summary:
-        ax.set_title(f"{title_prefix} vs {var.upper()} (Overall: {summary[summary_key]:.3f})",
-                     fontsize=font_sizes['title'])
+    ax.set_title(title, fontsize=font_sizes['title'])
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    save_plot_data_json(output_path, plot_data)
     plt.close()
     print(f"Saved: {output_path}")
 

@@ -1,31 +1,33 @@
 
 # Paths are relative to low_pt_gnn_pipeline directory
-input_dir: data/graph_constructed_latent  
+input_dir: data/graph_constructed_latent_tsmear_0ps
 stage_dir: data/gnn_stage/ 
-project: low_pt_GNN_20_mixed
+project: GNN_gridsearch_400_pions
 accelerator: cuda      #cpu vs cuda 
 devices: 1             
 nodes: 1
+precision: "16-mixed"
 logger: false  
 use_wandb: true  # Enable W&B tracking
 wandb_entity: bart_kuipers-nikhef  # W&B entity/username
-wandb_log_every_n_batches: 500
+wandb_log_every_n_batches: 50
 
-data_split: [96000, 900, 900]  # [training, validation, testing] 
+data_split: [10000, 500, 1000]  # [training, validation, testing]
 
 # Model architecture parameters
 edge_cut: 0.5  # Threshold for edge classification (0-1)
-undirected: True
-undirected_message_passing: True
-node_features: [hit_r, hit_phi, hit_z]          #FULL : [hit_r, hit_phi, hit_z, hit_t]   
-node_scales: [1000, 3.14, 500]                  #full : [1000, 3.14, 500, 2000]
+undirected: true
+undirected_message_passing: true
+#node_features: [hit_r, hit_phi, hit_z, hit_t_smeared] 
+node_features: [hit_r, hit_phi, hit_z, hit_t_smeared, hit_has_time]
+node_scales: [1000, 3.14159265359, 500, 4000, 1]
 
-hidden: 64 # 128 
+hidden: 256 # 128 
 n_graph_iters: 8 #  8
-nb_node_layer: 2
-nb_edge_layer: 2
-layernorm: True
-batchnorm: True
+nb_node_layer: 3
+nb_edge_layer: 3
+layernorm: true
+batchnorm: true
 aggregation: [sum, mean, max, std]  # Aggregation methods  in message 
 hidden_activation: SiLU
 output_activation: Tanh
@@ -37,17 +39,11 @@ scheduler: ReduceLROnPlateau  # Reduce LR only when val_loss doesn't improve
 check_val_every_n_epoch: 1  # Run validation every N epochs
 accumulate_grad_batches: 1 # Effective batch size: accumulate gradients over N graphs before weight update
 
-max_epochs: 50
+max_epochs: 15
 warmup: 1          #lineair increse from o to lr over warup epoch
 lr: 0.001          # ~ 0.001
-factor: 0.5
+factor: 0.8
 patience: 0     # Reduce LR after val_loss hasn't improved for this many partial epochs
-early_stopping_patience: 3  # Stop training after val_loss hasn't improved for this many epoch farctions 
-log_every_n_steps: 1  # Log loss
-val_check_interval: 0.4  # Check validation every 20% of epoch for large datasets
+early_stopping_patience: 6  # Stop training after val_loss hasn't improved for this many partial epochs
 
-
-
-# Class imbalance handling
-pos_weight: 1  # Adjust based on your class imbalance ratio 
-
+val_check_interval: 0.5

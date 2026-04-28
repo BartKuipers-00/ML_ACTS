@@ -13,12 +13,12 @@ input_dir: data/csv/                        # ACTS CSV files
 stage_dir: data/feature_store/              # Output PyG graphs
 
 # Data split [train, val, test]
-data_split: [90, 90, 9]
+data_split: [10000, 1000, 1000]
 # Which datasets to process
 input_sets: [trainset, valset, testset]
 # ACTS-specific settings
 simhit_stem: hits                           # Use 'hits' for truth hits
-use_truth_hits: true                        # Use true hit positions (not measurements)
+use_truth_hits: false                       # Use smeared measurement positions
 detector_path: data/csv/detectors.csv       # Detector geometry
 
 # Features to extract

@@ -13,8 +13,6 @@ model: InteractionGNN
 # 20 particle looper model SOTA 
 #checkpoint: saved_models/Low_pt_gnn_SOTA_val_loss=0.0037.ckpt
 
-## 20 particle looper model + Time + big data SOTA
-# checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/gnn_best_WEIRD_val_loss=0.0008.ckpt
 
 ## 20 particle looper model+ big data SOTA
 #checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/Low_pt_gnn_NO_TIME_BIG_DATA_val_loss=0.0038.ckpt
@@ -26,8 +24,13 @@ model: InteractionGNN
 # checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/low_pt_gnn_20_MIXED_segmented_val_loss=0.0013.ckpt
 
 ## 100 mixed looper SEGMENTED 
-checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/low_pt_gnn_100_MIXED_loss_val_loss=0.0013.ckpt
+#checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/low_pt_gnn_100_MIXED_loss_val_loss=0.0013.ckpt
 
+## 300 mixed looper SEGMENTED
+#checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/low_pt_gnn_300_mixed_segmented_val_loss=0.0022.ckpt
+
+## 300 mixed looper SEGMENTED one in one out (1i1o)
+checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/Low_pt_gnn_300_MIXED_1i1o_best_val_loss=0.0007.ckpt
 
 
 # Paths (absolute)
@@ -35,10 +38,10 @@ input_dir: /data/alice/bkuipers/low_pt_gnn_pipeline/data/graph_constructed_laten
 stage_dir: /data/alice/bkuipers/low_pt_gnn_pipeline/data/gnn_stage  # Output directory (graphs with edge_scores will be saved here)
 
 # Dataset parameters
-data_split: [0, 900, 900]  # [training, validation, testing] - infer on 100 test events
+data_split: [10000, 0, 0]  # [training, validation, testing] - infer on 100 test events
 
 # Inference options
-accelerator: cpu # cpu vs cuda
+accelerator: cuda # cpu vs cuda
 devices: 1
 nodes: 1
 num_workers: [8, 8, 8]  # Workers for [train, val, test] dataloaders during inference

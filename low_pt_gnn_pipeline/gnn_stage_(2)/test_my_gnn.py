@@ -1,7 +1,12 @@
 """
 Simple script to evaluate model accuracy on test data.
 Uses the model's data loading pipeline to ensure proper preprocessing.
+
+Example usage:
+    python test_my_gnn.py Low_pt_gnn_300_MIXED_1i1o_best_val_loss=0.0014 --num-events 2 --edge-cut 0.8 --validation
 """
+
+
 
 import argparse
 import sys
@@ -31,7 +36,7 @@ def find_checkpoint(model_name, base_dir=None):
     raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
 
-def evaluate_accuracy(model_name, config_file='acorn_configs/gnn_train.yaml', edge_cut=0.5, use_validation=False):
+def evaluate_accuracy(model_name, config_file='acorn_configs/gnn_train.yaml', edge_cut=0.5, use_validation=False, num_events=None):
     """
     Evaluate model accuracy on test or validation data.
     
@@ -85,6 +90,8 @@ def evaluate_accuracy(model_name, config_file='acorn_configs/gnn_train.yaml', ed
     
     actual_files = list(eval_set_dir.rglob("*.pyg"))
     num_files = len(actual_files)
+    if num_events is not None:
+        num_files = min(num_events, num_files)
     print(f"Found {num_files} files in {eval_set_dir.name}/")
     
     # Set data_split to use all available files in the evaluation set
@@ -212,9 +219,15 @@ def main():
         action='store_true',
         help='Evaluate on validation set instead of test set'
     )
-    
+    parser.add_argument(
+        '--num-events',
+        type=int,
+        default=None,
+        help='Number of events to evaluate (default: all)'
+    )
+
     args = parser.parse_args()
-    evaluate_accuracy(args.model_name, args.config, args.edge_cut, args.validation)
+    evaluate_accuracy(args.model_name, args.config, args.edge_cut, args.validation, args.num_events)
 
 
 if __name__ == '__main__':

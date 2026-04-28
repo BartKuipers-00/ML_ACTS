@@ -12,10 +12,16 @@ For example:
   - loop_fraction=0.5 → max 1 segment  (half loop: out only)
   - loop_fraction=2.0 → max 4 segments (two full loops)
 
-This script modifies hits CSV in-place (adding a 'segment_id' column and
-removing excess hits) and updates particle CSVs to remove particles that
-lost all their hits. Other CSV files (measurements, cells, simhit-map)
-are left untouched as they are unused with use_truth_hits=true.
+This script modifies CSV files in-place:
+  - hits.csv: adds 'simhit_id' (original SimHitContainer row position) and
+    'segment_id', then removes excess hits.
+  - measurement-simhit-map.csv: removes entries for deleted hits.
+  - measurements.csv: removes measurements whose simhit was deleted.
+  - particles_initial/simulated.csv: removes particles that lost all hits.
+
+The 'simhit_id' column is the stable key linking hits.csv rows to the
+measurement-simhit-map, required for correct particle_id / tt / segment_id
+lookup in the smeared-measurements path (use_truth_hits=false).
 
 Usage:
     python clean_loops_and_attribute_segments.py --loop-fraction F
@@ -98,13 +104,19 @@ def clean_event(event_prefix, max_segments):
     """
     Clean a single event: assign segments, remove excess hits, update CSV files.
 
-    Only modifies:
-      - hits.csv:              Assign segment_id, remove hits beyond max_segments.
-      - particles_initial.csv: Remove particles that lost all hits.
-      - particles_simulated.csv: Same treatment.
+    Modifies:
+      - hits.csv:                  Assign segment_id, add simhit_id (original
+                                   SimHitContainer row position), remove excess hits.
+      - measurement-simhit-map.csv: Remove entries for deleted hits.
+      - measurements.csv:          Remove measurements whose simhit was deleted.
+      - particles_initial.csv:     Remove particles that lost all hits.
+      - particles_simulated.csv:   Same treatment.
 
-    Other CSV files (measurements, measurement-simhit-map, cells) are left
-    untouched — they are unused when use_truth_hits=true in the reader config.
+    The simhit_id column records each hit's original row number in hits.csv
+    before any rows are removed.  This is the SimHitContainer position used
+    as the key in measurement-simhit-map.csv, and must be preserved so that
+    acts_custom_low_pt_reader.py can correctly look up particle_id / tt /
+    segment_id via the map even after rows are removed.
 
     Parameters
     ----------
@@ -121,15 +133,44 @@ def clean_event(event_prefix, max_segments):
     hits_path = f"{event_prefix}-hits.csv"
     hits = pd.read_csv(hits_path)
 
+    # Record original SimHitContainer positions BEFORE any removal.
+    # The map's hit_id == original pandas row index of hits.csv.
+    if "simhit_id" not in hits.columns:
+        hits["simhit_id"] = hits.index  # 0, 1, ..., N-1
+
     # Assign segments
     hits = assign_segments(hits)
 
     # Remove hits beyond allowed segments (keep noise hits with segment_id=0)
     mask_keep = (hits["segment_id"] <= max_segments) | (hits["segment_id"] == 0)
+    # Remove hits with |z| > 599 mm
+    mask_keep = mask_keep & (hits["tz"].abs() <= 599)
     hits_removed = (~mask_keep).sum()
+
+    removed_simhit_ids = set(hits.loc[~mask_keep, "simhit_id"])
+
     hits = hits[mask_keep].reset_index(drop=True)
-    hits["index"] = range(len(hits))
+    # Do NOT re-assign the 'index' column — it is simHit.index() (per-particle
+    # trajectory counter) written by ACTS and unrelated to the map's hit_id.
     hits.to_csv(hits_path, index=False)
+
+    # Update measurement-simhit-map: remove entries for deleted hits, then
+    # also drop the corresponding rows from measurements.csv so those hits
+    # don't appear as noise in the graph.
+    map_path = f"{event_prefix}-measurement-simhit-map.csv"
+    meas_path = f"{event_prefix}-measurements.csv"
+    if Path(map_path).exists() and len(removed_simhit_ids) > 0:
+        simhit_map = pd.read_csv(map_path)
+        # Keep only map entries whose hit_id is NOT in the removed set
+        mask_map_keep = ~simhit_map["hit_id"].isin(removed_simhit_ids)
+        removed_meas_ids = set(simhit_map.loc[~mask_map_keep, "measurement_id"])
+        simhit_map = simhit_map[mask_map_keep]
+        simhit_map.to_csv(map_path, index=False)
+
+        if Path(meas_path).exists() and len(removed_meas_ids) > 0:
+            meas = pd.read_csv(meas_path)
+            meas = meas[~meas["measurement_id"].isin(removed_meas_ids)]
+            meas.to_csv(meas_path, index=False)
 
     # Clean particle files: remove particles that lost all hits
     surviving_pids = set(hits["particle_id"].unique()) - {0}
@@ -155,6 +196,11 @@ def main():
     parser.add_argument(
         "--loop-fraction", "-f", type=float, default=None,
         help="Loop fraction (e.g. 1.0 = one full loop = 2 segments). Required."
+    )
+    parser.add_argument(
+        "--data-dir", type=str, default=None,
+        help="Override data directory (must contain a csv/ subdirectory). "
+             "Defaults to base_dir from config."
     )
     parser.add_argument(
         "--chunk", type=int, default=None,
@@ -184,11 +230,14 @@ def main():
 
     max_segments = int(np.ceil(2 * args.loop_fraction))
 
-    # Resolve CSV directory from config
-    base_dir = config['output']['base_dir']
-    if not Path(base_dir).is_absolute():
-        base_dir = str(PIPELINE_ROOT / base_dir)
-    csv_dir = Path(base_dir) / "csv"
+    # Resolve CSV directory from --data-dir arg or config
+    if args.data_dir is not None:
+        csv_dir = Path(args.data_dir) / "csv"
+    else:
+        base_dir = config['output']['base_dir']
+        if not Path(base_dir).is_absolute():
+            base_dir = str(PIPELINE_ROOT / base_dir)
+        csv_dir = Path(base_dir) / "csv"
 
     if not csv_dir.exists():
         print(f"ERROR: CSV directory not found: {csv_dir}")

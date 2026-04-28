@@ -12,10 +12,67 @@ and Euclidean distance = sqrt(2 - 2*(a·b)). So finding the K closest neighbors
 is equivalent to finding K largest dot products — computed via matmul, which
 avoids materialising a full N×N distance matrix.
 
-The r_max threshold converts as: dist <= r_max  ↔  sim >= 1 - r_max²/2
 """
 import torch
 from typing import Optional
+
+
+def compute_edge_y(
+    graph_edges: torch.Tensor,
+    particle_id: torch.Tensor,
+    track_edges: torch.Tensor,
+    segment_id: Optional[torch.Tensor] = None,
+    one_in_one_out: bool = False,
+) -> torch.Tensor:
+    """
+    Compute binary edge truth labels (edge_y) for a set of candidate edges.
+
+    Two modes:
+    - one_in_one_out=False (default): an edge is true if both endpoints share
+      the same non-noise particle_id (and optionally the same segment_id).
+    - one_in_one_out=True: an edge is true only if it is a consecutive hit pair
+      already present in track_edges (time-ordered, segment-aware ground truth
+      edges from the reader). Uses torch.isin on packed edge IDs — O(E) and
+      requires no extra bookkeeping.
+
+    In both modes, segment_id (when provided) additionally requires that both
+    endpoints belong to the same segment, so the transition edge between the
+    outgoing and incoming arc of a looping particle is never labelled true.
+
+    Args:
+        graph_edges:   [2, E] candidate edges (node indices).
+        particle_id:   [N] particle ID per hit (0 = noise).
+        track_edges:   [2, T] consecutive ground-truth edges from the reader.
+        segment_id:    [N] segment ID per hit, or None.
+        one_in_one_out: if True, use consecutive-only definition.
+
+    Returns:
+        edge_y: [E] long tensor of 0/1 truth labels.
+    """
+    if one_in_one_out:
+        num_nodes = particle_id.shape[0]
+        # Pack each edge as a single integer: src * N + dst
+        track_keys = track_edges[0] * num_nodes + track_edges[1]
+        track_keys_rev = track_edges[1] * num_nodes + track_edges[0]  # undirected
+        all_track_keys = torch.cat([track_keys, track_keys_rev])
+        pred_keys = graph_edges[0] * num_nodes + graph_edges[1]
+        edge_y = torch.isin(pred_keys, all_track_keys).long()
+
+        if segment_id is not None:
+            seg_src = segment_id[graph_edges[0]]
+            seg_tgt = segment_id[graph_edges[1]]
+            edge_y = edge_y * (seg_src == seg_tgt).long()
+    else:
+        pid_src = particle_id[graph_edges[0]]
+        pid_tgt = particle_id[graph_edges[1]]
+        edge_y = ((pid_src == pid_tgt) & (pid_src > 0)).long()
+
+        if segment_id is not None:
+            seg_src = segment_id[graph_edges[0]]
+            seg_tgt = segment_id[graph_edges[1]]
+            edge_y = edge_y * (seg_src == seg_tgt).long()
+
+    return edge_y
 
 
 def build_edges(

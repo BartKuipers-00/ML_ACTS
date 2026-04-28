@@ -7,7 +7,7 @@ model: MetricLearning
 # Data directories
 input_dir: data/feature_store  # PyG graphs from ActsReader (has r, phi, z, particle_id)
 stage_dir: data/metric_learning  # Output directory for trained model
-project: Low_pt_latent_map_MLP_segmented_100_mixed # W&B project name
+project: Latent_map_MLP_segmented_300_mixed # W&B project name
 accelerator: gpu
 devices: 1
 nodes: 1
@@ -31,11 +31,10 @@ weighting:
 
 
 # Model architecture
-undirected: True  
-train_undirected: True
+segmented: true   # true = edges only within a segment (current default); false = edges span full particle (segment boundaries are also true)
 node_features: [hit_r, hit_phi, hit_z]  
 node_scales: [1000, 3.14, 500]  
-emb_hidden: 128  #512. #128    
+emb_hidden: 64 #512. #128    
 nb_layer: 6  # depth        eg 3 -> emb_hoidden -> emb_hidden -> emb_dim...x(nb_layer times)--> emb_dim
 emb_dim: 8  # Final latent dimension 
 activation: Tanh 
@@ -43,13 +42,13 @@ activation: Tanh
 # Training sampling parameters
 randomisation: 1  # Add random negative pairs (number = randomisation * points_per_batch)
 points_per_batch: 5000
-r_train: 0.15      #for hard negative mining
+r_train: 0.1      #for hard negative mining
 knn: 50      # training 
 knn_val: 50  # during validation 
 
 # Optimization parameters
 warmup: 1
-margin: 0.15  # Hinge loss margin
+margin: 0.1  # Hinge loss margin
 lr: 0.001 
 scheduler: ReduceLROnPlateau  # Decrease LR only when validation metric doesn't improve
 factor: 0.5 # LR decay factor (multiply LR by this when reducing)

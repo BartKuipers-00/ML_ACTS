@@ -1,0 +1,33 @@
+{ decls }
+namespace std {  }
+namespace HepMC3 {  }
+
+[ libHepMC3rootIO.so ]
+# List of selected classes
+class HepMC3::FourVector
+class HepMC3::GenEventData
+class HepMC3::GenParticleData
+class HepMC3::GenRunInfoData
+class HepMC3::GenVertexData
+class HepMC3::Setup
+class HepMC3::Units
+class vector<HepMC3::GenParticleData>
+class vector<HepMC3::GenVertexData>
+class vector<int>
+class vector<std::string>
+class vector<string>
+header HepMC3/FourVector.h
+header HepMC3/Data/GenEventData.h
+header HepMC3/Data/GenParticleData.h
+header HepMC3/Data/GenRunInfoData.h
+header HepMC3/Data/GenVertexData.h
+header HepMC3/Setup.h
+header HepMC3/Units.h
+# List of selected typedefs and outer classes
+typedef HepMC::GenEventData
+typedef HepMC::GenRunInfoData
+typedef HepMC::GenParticleData
+typedef HepMC::GenVertexData
+typedef HepMC::FourVector
+typedef HepMC::Units
+typedef HepMC::Setup

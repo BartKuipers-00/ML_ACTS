@@ -26,7 +26,10 @@ sys.path.insert(0, str(WORKSPACE_ROOT / 'acorn'))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.stages.data_reading.models.acts_reader import ActsReader
+import logging
+import os
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import random_split
 
@@ -63,6 +66,33 @@ class ActsCustomLowPTReader(ActsReader):
 
             print(f"Processing {len(self.trainset)} events sequentially (no split)")
             print()
+
+    def _process_measurements(self, measurements, simhits, simhit_map):
+        """
+        Override to propagate segment_id and time from simhits to measurements.
+
+        The parent only joins geometry, hit_id, and particle_id. We additionally
+        map segment_id and tt (renamed to t) so the rest of the pipeline sees the
+        same column names as the truth-hits path.
+
+        simhit_map.hit_id is the SimHitContainer row position (original pandas
+        row index of hits.csv before any rows were removed).  clean_loops
+        preserves this as the 'simhit_id' column; fall back to pandas row index
+        for backwards-compatibility with raw ACTS output.
+        """
+        result = super()._process_measurements(measurements, simhits, simhit_map)
+
+        # Build simhit_id -> tt / segment_id lookups using the stable SimHitContainer
+        # position stored in the 'simhit_id' column (added by clean_loops).
+        if "simhit_id" in simhits.columns:
+            key = simhits["simhit_id"]
+        else:
+            key = simhits.index  # raw ACTS output: row index == container position
+
+        result["t"] = result["hit_id"].map(dict(zip(key, simhits["tt"])))
+        result["segment_id"] = result["hit_id"].map(dict(zip(key, simhits["segment_id"])))
+
+        return result
 
     def _build_true_tracks(self, hits):
         """

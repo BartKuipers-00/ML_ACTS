@@ -4,15 +4,8 @@ Evaluate metric learning (latent cluster learning) model on test set
 
 Computes TP, FP, TN, FN and other metrics for graph construction performance.
 
-Usage:
-    python test_my_latent_model.py <checkpoint_path> [--knn KNN] [--r-max R_MAX] [--r-max-geometric MM]
-
-Example (LOW PT model 20 particles):
-    python test_my_latent_model.py saved_models/low_PT_latentmodel_Eff_0.98.ckpt
-    python test_my_latent_model.py saved_models/low_PT_latentmodel_Eff_0.98.ckpt --knn 500 --r-max 0.15
-    python test_my_latent_model.py saved_models/low_PT_latentmodel_Eff_0.98.ckpt --knn 500 --r-max 0.15 --r-max-geometric 500
-
-
+Example:
+    python test_my_latent_model.py saved_models/low_pt_latentmodel_100_mixed_f1=0.2752.ckpt --num-events 20 --dr-same-layer-cut 10 --knn 200 --r-max 0.4 --r-max-geometric 500 
 """
 
 #low_pt_latentmodel_val_loss_val_loss=0.0074.ckpt
@@ -63,7 +56,30 @@ def load_model(checkpoint_path):
     return model, hparams
 
 
-def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geometric=None, device='cpu'):
+def build_particle_only_edges(batch):
+    """Rebuild track_edges to span segment boundaries (all consecutive same-particle hits by time).
+    Used when segmented=False so cross-segment edges count as true positives."""
+    particle_ids = batch.hit_particle_id
+    hit_t = batch.hit_t
+    edges = []
+    for pid in particle_ids.unique():
+        if pid == 0:
+            continue
+        mask = particle_ids == pid
+        idx = mask.nonzero(as_tuple=True)[0]
+        times = hit_t[idx]
+        order = torch.argsort(times)
+        sorted_idx = idx[order]
+        if len(sorted_idx) >= 2:
+            src = sorted_idx[:-1]
+            dst = sorted_idx[1:]
+            edges.append(torch.stack([src, dst], dim=0))
+    if not edges:
+        return torch.zeros(2, 0, dtype=torch.long, device=particle_ids.device)
+    return torch.cat(edges, dim=1)
+
+
+def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geometric=None, dr_same_layer_cut=None, segmented=True, device='cpu'):
     """
     Evaluate metric learning model on test set
     
@@ -98,10 +114,9 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
     
     print(f"Evaluating on {len(testset)} test events...")
     geo_str = f"{r_max_geometric} mm" if r_max_geometric is not None else "disabled"
-    print(f"Graph construction parameters: r_max={r_max}, k_max={knn_max}, r_max_geometric={geo_str}")
-    print()
-    print("NOTE: For graph construction stage, high recall (low FN) is critical.")
-    print(f"      Current k_max={knn_max} may be too low. Try k_max=1000-2000 for better recall.")
+    layer_str = f"{dr_same_layer_cut} mm" if dr_same_layer_cut else "disabled"
+    print(f"Graph construction parameters: r_max={r_max}, k_max={knn_max}, r_max_geometric={geo_str}, dr_same_layer_cut={layer_str}")
+    print(f"segmented={segmented}  ({'cross-segment edges count as false' if segmented else 'cross-segment same-particle edges count as true'})")
     print()
     
     with torch.no_grad():
@@ -137,8 +152,20 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
                 dist3d = torch.sqrt(dx**2 + dy**2 + dz**2)
                 pred_edges = pred_edges[:, dist3d <= r_max_geometric]
 
+            # Remove same-layer edges: hits with |Δr| < dr_same_layer_cut are on the same detector layer
+            if dr_same_layer_cut:
+                src, dst = pred_edges
+                node_scales = hparams.get("node_scales", [1000.0, 3.14, 500.0])
+                hit_r_mm = batch.hit_r.float() * node_scales[0]
+                dr = torch.abs(hit_r_mm[src] - hit_r_mm[dst])
+                pred_edges = pred_edges[:, dr >= dr_same_layer_cut]
+
             # Get truth edges from batch
-            true_edges = batch.track_edges
+            # If segmented=False, rebuild edges to span segment boundaries
+            if not segmented:
+                true_edges = build_particle_only_edges(batch)
+            else:
+                true_edges = batch.track_edges
             
             # Count unique true edges first (handle undirected case where edges might be duplicated)
             # True edges might be stored as undirected (each edge appears twice: (i,j) and (j,i))
@@ -267,7 +294,7 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
     }
 
 
-def print_results(metrics, knn_max, r_max, r_max_geometric=None):
+def print_results(metrics, knn_max, r_max, r_max_geometric=None, dr_same_layer_cut=None, segmented=True):
     """Print evaluation results in a formatted way"""
     print("\n" + "="*80)
     print("EVALUATION RESULTS")
@@ -277,6 +304,9 @@ def print_results(metrics, knn_max, r_max, r_max_geometric=None):
     print(f"  k_max: {knn_max}")
     geo_str = f"{r_max_geometric} mm" if r_max_geometric is not None else "disabled"
     print(f"  r_max_geometric: {geo_str}")
+    layer_str = f"{dr_same_layer_cut} mm" if dr_same_layer_cut is not None else "disabled"
+    print(f"  dr_same_layer_cut: {layer_str}")
+    print(f"  segmented: {segmented}  ({'within-segment edges only' if segmented else 'cross-segment same-particle edges are true'})")
     print()
     # Calculate average connections per node
     avg_connections = metrics['total_pred_edges'] / metrics['total_nodes'] if metrics['total_nodes'] > 0 else 0
@@ -330,9 +360,6 @@ Examples:
   python test_my_latent_model.py saved_models/low_pt_latent_f1=0.0149.ckpt
   python test_my_latent_model.py saved_models/low_pt_latent_f1=0.0149.ckpt --knn 1000 --r-max 0.15
   python test_my_latent_model.py saved_models/low_pt_latent_f1=0.0149.ckpt --knn 2000 --r-max 0.15
-  
-Note: For graph construction, use high k_max (1000-2000) to achieve high recall (low FN).
-      Precision will be lower but that's OK - the GNN will filter false positives later.
         """
     )
     parser.add_argument(
@@ -343,26 +370,51 @@ Note: For graph construction, use high k_max (1000-2000) to achieve high recall 
     parser.add_argument(
         '--knn', '--k-max',
         type=int,
-        default=1000,
-        help='Maximum number of neighbors for KNN graph construction (default: 1000, recommended: 500-2000 for high recall)'
+        default=None,
+        help='Maximum number of neighbors for KNN graph construction (default: from graph_construction_latent.yaml)'
     )
     parser.add_argument(
         '--r-max',
         type=float,
-        default=0.15,
-        help='Maximum radius for graph construction (default: 0.15)'
+        default=None,
+        help='Maximum radius for graph construction (default: from graph_construction_latent.yaml)'
     )
     parser.add_argument(
         '--r-max-geometric',
         type=float,
         default=None,
-        help='Maximum 3D Euclidean distance (mm) between connected hits; applied after KNN (default: None = disabled)'
+        help='Maximum 3D Euclidean distance (mm) between connected hits; applied after KNN (default: from graph_construction_latent.yaml)'
+    )
+    parser.add_argument(
+        '--dr-same-layer-cut',
+        type=float,
+        default=None,
+        help='Remove edges between hits with |Δr| < this threshold (mm); 0 or omit to disable (default: from graph_construction_latent.yaml)'
+    )
+    parser.add_argument(
+        '--segmented',
+        type=lambda x: x.lower() not in ('false', '0', 'no'),
+        default=None,
+        metavar='BOOL',
+        help='Whether cross-segment same-particle edges are false (default: from graph_construction_latent.yaml)'
+    )
+    parser.add_argument(
+        '--num-events',
+        type=int,
+        default=None,
+        help='Number of test events to evaluate (default: all events in testset as defined by data_split in config)'
     )
     parser.add_argument(
         '--config',
         type=str,
         default=None,
-        help='Path to config file (default: acorn_configs/latent_cluster_learning_train.yaml)'
+        help='Path to training config file (default: acorn_configs/latent_stage_(1)/latent_cluster_learning_train.yaml)'
+    )
+    parser.add_argument(
+        '--graph-config',
+        type=str,
+        default=None,
+        help='Path to graph construction config file (default: acorn_configs/latent_stage_(1)/graph_construction_latent.yaml)'
     )
     parser.add_argument(
         '--device',
@@ -406,19 +458,39 @@ Note: For graph construction, use high k_max (1000-2000) to achieve high recall 
     
     model, hparams = load_model(checkpoint_path)
     
-    # Load config
+    # Load training config
     if args.config is None:
         config_path = PIPELINE_ROOT / 'acorn_configs' / 'latent_stage_(1)' / 'latent_cluster_learning_train.yaml'
     else:
         config_path = Path(args.config)
-    
+
     if not config_path.exists():
         print(f"ERROR: Config file not found: {config_path}")
         sys.exit(1)
-    
+
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
-    
+
+    # Load graph construction config
+    if args.graph_config is None:
+        graph_config_path = PIPELINE_ROOT / 'acorn_configs' / 'latent_stage_(1)' / 'graph_construction_latent.yaml'
+    else:
+        graph_config_path = Path(args.graph_config)
+
+    if not graph_config_path.exists():
+        print(f"ERROR: Graph construction config not found: {graph_config_path}")
+        sys.exit(1)
+
+    with open(graph_config_path, 'r') as f:
+        graph_config = yaml.safe_load(f)
+
+    # Resolve evaluation parameters: CLI args override graph construction config
+    knn_max           = args.knn                if args.knn                is not None else graph_config.get('k_max', 1000)
+    r_max             = args.r_max              if args.r_max              is not None else graph_config.get('r_max', 0.15)
+    r_max_geo         = args.r_max_geometric    if args.r_max_geometric    is not None else graph_config.get('r_max_geometric', None)
+    dr_same_layer_cut = args.dr_same_layer_cut  if args.dr_same_layer_cut  is not None else graph_config.get('dr_same_layer_cut', None)
+    segmented         = args.segmented          if args.segmented          is not None else graph_config.get('segmented', True)
+
     # Setup dataset - path is relative to pipeline root
     input_dir_config = config['input_dir']
 
@@ -439,7 +511,7 @@ Note: For graph construction, use high k_max (1000-2000) to achieve high recall 
     # Create dataset
     # Get number of test events from config
     data_split = config.get('data_split', [9000, 500, 500])
-    num_test_events = data_split[2] if len(data_split) > 2 else None
+    num_test_events = args.num_events if args.num_events is not None else (data_split[2] if len(data_split) > 2 else None)
     
     testset = EventDataset(
         input_dir=str(input_dir),
@@ -456,14 +528,16 @@ Note: For graph construction, use high k_max (1000-2000) to achieve high recall 
         model,
         hparams,
         testset,
-        knn_max=args.knn,
-        r_max=args.r_max,
-        r_max_geometric=args.r_max_geometric,
+        knn_max=knn_max,
+        r_max=r_max,
+        r_max_geometric=r_max_geo,
+        dr_same_layer_cut=dr_same_layer_cut,
+        segmented=segmented,
         device=device,
     )
 
     # Print results
-    print_results(metrics, args.knn, args.r_max, args.r_max_geometric)
+    print_results(metrics, knn_max, r_max, r_max_geo, dr_same_layer_cut=dr_same_layer_cut, segmented=segmented)
     
     print("✓ Evaluation complete!")
 

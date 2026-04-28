@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 """
-ULTRA-OPTIMIZED Graph construction using learned latent space embeddings
+Graph construction using learned latent space embeddings
 
-Key optimizations over build_latent_graphs_fast.py:
-- TRUE batching: Process multiple graphs simultaneously on GPU using PyG Batch
-- Async file saving: Save graphs in background thread while GPU processes next batch
-- More efficient memory management
 
 Usage:
     python build_latent_graphs_ultra_fast.py <model_name>
@@ -36,8 +32,7 @@ sys.path.insert(0, str(WORKSPACE_ROOT / 'acorn'))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.stages.graph_construction.models.metric_learning import MetricLearning
-from acorn.stages.graph_construction.models.utils import graph_intersection
-from low_pt_custom_utils.graph_utils import build_edges  # proper KNN+radius (no FRNN needed)
+from low_pt_custom_utils.graph_utils import build_edges, compute_edge_y  # proper KNN+radius (no FRNN needed)
 
 
 def load_config(config_path=None):
@@ -136,7 +131,7 @@ class GraphDataset(Dataset):
         return graph
 
 
-def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max=0.15, r_max_geometric=None):
+def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max=0.15, r_max_geometric=None, dr_same_layer_cut=None, segmented=True, one_in_one_out=False, node_scales=None):
     """
     Build edges using TRUE batching - process all graphs simultaneously on GPU
 
@@ -162,9 +157,12 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
     for graph in graphs:
         # Extract features for this graph
         feature_list = []
-        for feat_name in node_features:
+        for i, feat_name in enumerate(node_features):
             if hasattr(graph, feat_name):
-                feature_list.append(getattr(graph, feat_name))
+                feat = getattr(graph, feat_name).float()
+                if node_scales is not None:
+                    feat = feat / node_scales[i]
+                feature_list.append(feat)
             else:
                 raise ValueError(f"Feature {feat_name} not found in graph")
 
@@ -187,10 +185,7 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
     with torch.no_grad():
         all_embeddings = model(batch_features)  # [total_hits_in_batch, emb_dim]
 
-    # Move embeddings to CPU for post-processing
-    all_embeddings = all_embeddings.cpu()
-
-    # Split embeddings back to individual graphs
+    # Split embeddings back to individual graphs (keep on GPU for KNN matmul)
     node_offsets = [0]
     for x in all_features:
         node_offsets.append(node_offsets[-1] + x.shape[0])
@@ -201,10 +196,10 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
         end_idx = node_offsets[i + 1]
         num_nodes = end_idx - start_idx
 
-        # Extract embeddings for this graph
+        # Extract embeddings for this graph (still on GPU)
         embeddings = all_embeddings[start_idx:end_idx]
 
-        # Build edges using build_edges with both k_max and r_max (like test script)
+        # Build edges — matmul is device-aware (CPU or GPU depending on config)
         graph_edges = build_edges(
             query=embeddings,
             database=embeddings,
@@ -213,6 +208,9 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
             k_max=k_max,
             backend="FRNN",
         )
+
+        # Ensure edge list is on CPU before geometric cuts (hit tensors are on CPU)
+        graph_edges = graph_edges.cpu()
 
         # Apply physical geometric distance cut in 3D detector space
         # Use raw Cartesian coordinates (mm) — hit_x/hit_y are unscaled raw CSV values
@@ -228,19 +226,23 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
             geo_mask = dist3d <= r_max_geometric
             graph_edges = graph_edges[:, geo_mask]
 
-        # Compute edge truth labels (segment-aware)
+        # Remove same-layer edges: hits with |Δr| < dr_same_layer_cut are on the same detector layer
+        if dr_same_layer_cut is not None:
+            src, dst = graph_edges
+            dr = torch.abs(graph.hit_r[src] - graph.hit_r[dst])
+            graph_edges = graph_edges[:, dr >= dr_same_layer_cut]
+
+        # Compute edge truth labels
         particle_id = all_particle_ids[i]
-        segment_id = all_segment_ids[i]
+        segment_id = all_segment_ids[i] if segmented else None
 
-        pid_src = particle_id[graph_edges[0]]
-        pid_tgt = particle_id[graph_edges[1]]
-        edge_y = ((pid_src == pid_tgt) & (pid_src > 0)).long()
-
-        # If segment_id provided, additionally require same segment
-        if segment_id is not None:
-            seg_src = segment_id[graph_edges[0]]
-            seg_tgt = segment_id[graph_edges[1]]
-            edge_y = edge_y * (seg_src == seg_tgt).long()
+        edge_y = compute_edge_y(
+            graph_edges,
+            particle_id,
+            graph.track_edges,
+            segment_id=segment_id,
+            one_in_one_out=one_in_one_out,
+        )
 
         # Build track_to_edge_map (segment-aware if segment_id exists)
         if segment_id is not None:
@@ -279,7 +281,7 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
         graph.edge_index = graph_edges
         graph.edge_y = edge_y
         graph.track_to_edge_map = track_to_edge_map
-        graph.embeddings = embeddings
+        graph.embeddings = embeddings.cpu()
 
         processed_graphs.append(graph)
 
@@ -343,9 +345,20 @@ def run_graph_construction(model, hparams, config):
     k_max = config['k_max']
     r_max = config.get('r_max', 0.15)
     r_max_geometric = config.get('r_max_geometric', None)
+    dr_same_layer_cut = config.get('dr_same_layer_cut', None)
+    segmented = config.get('segmented', True)
+    one_in_one_out = config.get('one_in_one_out', False)
     device = config.get('device', 'cpu')
-    datasets = config.get('datasets', ['trainset', 'valset', 'testset'])
+    datasets_config = config.get('datasets', ['trainset', 'valset', 'testset'])
+    # Support both list format (process all) and dict format {name: max_count}
+    if isinstance(datasets_config, dict):
+        datasets = list(datasets_config.keys())
+        dataset_limits = datasets_config
+    else:
+        datasets = datasets_config
+        dataset_limits = {}
     node_features = hparams['node_features']
+    node_scales = hparams.get('node_scales', None)
 
     # Optimization parameters
     num_workers = config.get('num_workers', 8)
@@ -357,6 +370,7 @@ def run_graph_construction(model, hparams, config):
     print(f"Max neighbors (KNN): {k_max}")
     print(f"Max radius (latent space): {r_max}")
     print(f"Max geometric distance (3D, mm): {r_max_geometric if r_max_geometric is not None else 'disabled'}")
+    print(f"Same-layer cut (dr, mm): {dr_same_layer_cut if dr_same_layer_cut is not None else 'disabled'}")
     print(f"Device: {device}")
     print(f"Node features: {node_features}")
     print(f"Num workers: {num_workers}")
@@ -386,7 +400,12 @@ def run_graph_construction(model, hparams, config):
             print(f"Skipping {dataset_name} - no graph files found")
             continue
 
-        print(f"\nProcessing {dataset_name}: {len(event_files)} events")
+        limit = dataset_limits.get(dataset_name)
+        if limit is not None and len(event_files) > limit:
+            event_files = event_files[:limit]
+            print(f"\nProcessing {dataset_name}: {len(event_files)} events (limited to {limit})")
+        else:
+            print(f"\nProcessing {dataset_name}: {len(event_files)} events")
 
         # Create dataset and dataloader
         dataset = GraphDataset(event_files, input_dataset_dir, node_features)
@@ -417,14 +436,24 @@ def run_graph_construction(model, hparams, config):
             for batch_graphs in pbar:
                 # Process batch on GPU with TRUE batching
                 processed_graphs = build_edges_latent_true_batch(
-                    model, batch_graphs, node_features, k_max, r_max, r_max_geometric
+                    model, batch_graphs, node_features, k_max, r_max, r_max_geometric, dr_same_layer_cut,
+                    segmented=segmented, one_in_one_out=one_in_one_out, node_scales=node_scales,
                 )
 
                 # Update statistics (do this before async save)
                 for graph in processed_graphs:
                     total_nodes += graph.num_nodes
                     total_edges += graph.edge_index.shape[1]
-                    total_true_edges += graph.edge_y.sum().item()
+                    # Count unique undirected true edges: canonicalize (i,j) and (j,i) to
+                    # (min,max) so bidirectional true labels aren't double-counted
+                    true_mask = graph.edge_y.bool()
+                    true_ei = graph.edge_index[:, true_mask]
+                    if true_ei.shape[1] > 0:
+                        canonical = torch.stack([true_ei.min(dim=0)[0], true_ei.max(dim=0)[0]])
+                        num_unique = canonical.T.unique(dim=0).shape[0]
+                    else:
+                        num_unique = 0
+                    total_true_edges += num_unique
                     num_graphs_processed += 1
 
                 # Save graphs asynchronously
@@ -447,8 +476,10 @@ def run_graph_construction(model, hparams, config):
         # Print statistics
         print(f"  ✓ Total nodes: {total_nodes}")
         print(f"  ✓ Total edges: {total_edges}")
-        print(f"  ✓ True edges: {total_true_edges} ({100*total_true_edges/total_edges:.1f}%)")
-        print(f"  ✓ Avg edges/node: {total_edges/total_nodes:.1f}")
+        if total_edges > 0:
+            print(f"  ✓ True edges: {total_true_edges} ({100*total_true_edges/total_edges:.1f}%)")
+        if total_nodes > 0:
+            print(f"  ✓ Avg edges/node: {total_edges/total_nodes:.1f}")
 
     print("\n✓ Graph construction complete!\n")
 

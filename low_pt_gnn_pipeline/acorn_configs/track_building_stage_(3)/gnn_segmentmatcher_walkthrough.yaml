@@ -1,0 +1,85 @@
+# GNN Segment Matching with Wrangler — Inference Configuration
+# Used by GNN_segmentmatcher_walkthrough.py
+
+# Dataset parameters  [n_trainset, n_valset, n_testset]
+data_split: [0, 10, 1000]
+
+# Input/output
+input_dir: data/gnn_stage
+stage_dir: data/track_building
+output_dir: SegmentGNN         # suffix appended to output dirs, e.g. "SegmentGNN_GT" → testset_SegmentGNN_GT
+
+# ============================================================================
+# SEGMENT EXTRACTION
+# ============================================================================
+
+use_gt_segments: false  # true = use hit_segment_id, false = use CC [+ Wrangler]
+score_cut: 0.4         # Edge score threshold for CC clustering
+
+# ============================================================================
+# WRANGLER (walk-through disentanglement)
+# ============================================================================
+
+use_wrangler: true    # false = skip Wrangler, use plain CC (same as GNN_segment_matching_track_builder.py)
+
+
+# ============================================================================
+# GNN SEGMENT EMBEDDER
+# ============================================================================
+
+gnn:
+  model_path: data_100_mixed/track_building/mini_GNN_checkpoints/mini_gnn_segment_embedder_val_loss=1.2621.pt
+
+  # Matching thresholds
+  cos_sim_threshold: 0.65
+  outer_r_threshold: 1000.0  # mm
+
+  # Geometric pre-filter: veto pairs where two segments are too co-located
+  # at large r (confuser rejection). Applied before greedy matching.
+  # Set geo_cut_enabled: false to disable without changing other params.
+  geo_cut_enabled:   true
+  geo_cut_r_high_mm: 150.0   # only consider hits above this radius (mm)
+  geo_cut_r_tol_mm:  15.0    # |r_A - r_B| tolerance to consider hits co-layer (mm)
+  geo_cut_min_3d_mm: 100.0   # min 3D separation required at overlapping layers (mm)
+
+# ============================================================================
+# EVALUATION PARAMETERS
+# ============================================================================
+
+matching_fraction: 0.7
+matching_style: two_way
+min_track_length: 5
+
+target_tracks:
+    pt: [0.1, .inf]
+    nhits: [7, .inf]
+
+target_segments:
+    pt: [0.1, .inf]
+    min_segment_hits: 2       # each individual segment must have at least this many hits
+
+# Plot configuration
+plots:
+  segment_evaluation:
+    min_bin_fraction: 0.01   # suppress bins with < this fraction of the peak-bin count
+  tracking_efficiency:
+    title: Track Reconstruction Efficiency (GNN + Wrangler)
+    font_sizes:
+      axis_label: 18
+      tick_label: 14
+      legend: 14
+      title: 18
+    variables:
+      pt:
+        x_label: '$p_T$ [GeV]'
+        x_lim: [0.1, 0.5]
+        y_lim: [0.0, 1.05]
+        n_bins: 30
+      eta:
+        x_label: '$\eta$'
+        x_lim: [-0.2, 0.2]
+        y_lim: [0, 1.1]
+        n_bins: 30
+
+# Variable prefix handling
+variable_with_prefix: true

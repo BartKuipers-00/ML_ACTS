@@ -43,6 +43,11 @@ from low_pt_custom_utils.track_evaluation_utils import (
     save_evaluation_results,
     run_plotting,
 )
+from low_pt_custom_utils.segment_evaluation_utils import (
+    evaluate_matching_efficiency_for_event,
+    make_matching_efficiency_summary,
+    plot_matching_efficiency,
+)
 
 # Import segment matching logic
 from low_pt_custom_utils.segment_matching import build_tracks_for_event
@@ -50,14 +55,31 @@ from low_pt_custom_utils.segment_matching import build_tracks_for_event
 
 # ─── Main Algorithm ─────────────────────────────────────────────────────────
 
-def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=None):
-    """Build tracks for all events in a dataset using helix-based segment matching."""
-    input_dir = Path(config.get('input_dir', 'data/gnn_stage'))
-    if not input_dir.is_absolute():
-        input_dir = PIPELINE_ROOT / input_dir
+def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=None, use_wrangler=None,
+                         matching_eff_results=None, data_dir=None, output_name=None):
+    """Build tracks for all events in a dataset using helix-based segment matching.
 
-    output_dir = PIPELINE_ROOT / 'data' / 'track_building'
-    dataset_output = output_dir / dataset_name
+    Args:
+        matching_eff_results: If a list is passed, per-event segment matching
+            efficiency records are appended to it for downstream plotting.
+        data_dir: If provided, override all data paths to subdirectories of this directory.
+    """
+    if data_dir is not None:
+        data_dir = Path(data_dir)
+        input_dir = data_dir / 'gnn_stage'
+        output_dir = data_dir / 'track_building'
+    else:
+        input_dir = Path(config.get('input_dir', 'data/gnn_stage'))
+        if not input_dir.is_absolute():
+            input_dir = PIPELINE_ROOT / input_dir
+        stage_dir = config.get('stage_dir')
+        if stage_dir is not None:
+            output_dir = Path(stage_dir)
+            if not output_dir.is_absolute():
+                output_dir = PIPELINE_ROOT / output_dir
+        else:
+            output_dir = PIPELINE_ROOT / 'data' / 'track_building'
+    dataset_output = output_dir / (output_name or dataset_name)
     dataset_output.mkdir(parents=True, exist_ok=True)
 
     # Override config with CLI args if provided
@@ -65,9 +87,12 @@ def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=N
         config['score_cut'] = score_cut
     if use_gt_segments is not None:
         config['use_gt_segments'] = use_gt_segments
+    if use_wrangler is not None:
+        config['use_wrangler'] = use_wrangler
 
     actual_score_cut = config.get('score_cut', 0.5)
     actual_use_gt = config.get('use_gt_segments', False)
+    actual_use_wrangler = config.get('use_wrangler', False)
     B_field = config.get('B_field', 2.0)
 
     # Load event files
@@ -78,7 +103,12 @@ def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=N
     input_paths = load_datafiles_in_dir(str(input_dir), dataset_name, num_events)
     input_paths.sort()
 
-    segment_mode = "ground truth (hit_segment_id)" if actual_use_gt else f"CC clusters (score > {actual_score_cut})"
+    if actual_use_gt:
+        segment_mode = "ground truth (hit_segment_id)"
+    elif actual_use_wrangler:
+        segment_mode = f"CC + Wrangler (score > {actual_score_cut})"
+    else:
+        segment_mode = f"CC only (score > {actual_score_cut})"
 
     print(f"Segment Matching Track Builder (Helix-Based)")
     print(f"  Input:              {input_dir / dataset_name}")
@@ -95,6 +125,7 @@ def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=N
     # Accumulate statistics
     total_stats = {
         "n_segments": 0,
+        "n_wrangler_splits": 0,
         "n_good_fits": 0,
         "n_poor_fits": 0,
         "n_no_fits": 0,
@@ -112,7 +143,21 @@ def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=N
         t_event = perf_counter()
         graph = torch.load(event_path, map_location="cpu", weights_only=False)
 
-        labels, event_stats = build_tracks_for_event(graph, config)
+        labels, event_stats, matching_info = build_tracks_for_event(
+            graph, config, return_matching_info=True
+        )
+
+        # Accumulate segment matching efficiency records if requested
+        if matching_eff_results is not None:
+            fiducial = config.get("target_segments", {"pt": [0.1, float("inf")], "nhits": [3, float("inf")]})
+            event_matching_eff = evaluate_matching_efficiency_for_event(
+                graph,
+                matching_info["segments"],
+                matching_info["matched_tracks"],
+                matching_info["unmatched"],
+                fiducial,
+            )
+            matching_eff_results.extend(event_matching_eff)
 
         graph.hit_track_labels = labels
         graph.time_taken = perf_counter() - t_event
@@ -136,6 +181,9 @@ def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=N
 
     print(f"\nSegment Statistics (totals across {n_events} events):")
     print(f"  Total segments:        {total_stats['n_segments']:6d}")
+    if actual_use_wrangler and not actual_use_gt:
+        print(f"  Wrangler splits:       {total_stats['n_wrangler_splits']:6d}  "
+              f"(CC clusters disentangled into >1 segment)")
     print(f"  Good fits (3+ hits):   {total_stats['n_good_fits']:6d}")
     print(f"  Poor fits (2 hits):    {total_stats['n_poor_fits']:6d}")
     print(f"  No fits (1 hit):       {total_stats['n_no_fits']:6d}")
@@ -200,10 +248,28 @@ Examples:
         help='Use ground truth segment labels instead of CC clusters'
     )
     parser.add_argument(
+        '--no-wrangler',
+        action='store_true',
+        help='Disable Wrangler: use plain CC without walk-through disentanglement'
+    )
+    parser.add_argument(
         '--skip-build',
         action='store_true',
         help='Skip track building, only re-evaluate'
     )
+    parser.add_argument(
+        '--data-dir',
+        type=str,
+        default=None,
+        help='Override all data paths (gnn_stage, track_building, track_evaluation, visuals) to subdirs of this directory'
+    )
+    parser.add_argument(
+        '--ood-config',
+        type=str,
+        default=None,
+        help='Path to ood_experiment.yaml; overrides track_building and evaluation hyperparameters'
+    )
+
 
     args = parser.parse_args()
 
@@ -220,10 +286,27 @@ Examples:
         config = yaml.safe_load(f)
     config['dataset'] = args.dataset
 
-    eval_output_dir = PIPELINE_ROOT / 'data' / 'track_evaluation' / args.dataset
-    plot_output_dir = PIPELINE_ROOT / 'data' / 'visuals' / 'track_metrics' / args.dataset
+    # Merge OOD experiment config overrides
+    if args.ood_config is not None:
+        with open(args.ood_config) as f:
+            ood = yaml.safe_load(f)
+        config['data_split'] = [0, 0, ood['n_events']]
+        config.update(ood.get('track_building', {}))
+        config.update(ood.get('evaluation', {}))
+
+    output_dir_suffix = config.get('output_dir') or None
+    output_dataset = f"{args.dataset}_{output_dir_suffix}" if output_dir_suffix else args.dataset
+
+    data_dir = Path(args.data_dir) if args.data_dir else None
+    if data_dir is not None:
+        eval_output_dir = data_dir / 'track_evaluation' / output_dataset
+        plot_output_dir = data_dir / 'visuals' / 'track_metrics' / output_dataset
+    else:
+        eval_output_dir = PIPELINE_ROOT / 'data' / 'track_evaluation' / output_dataset
+        plot_output_dir = PIPELINE_ROOT / 'data' / 'visuals' / 'track_metrics' / output_dataset
 
     # ── Step 1: Track Building ──────────────────────────────────────────
+    matching_eff_results = []
     if not args.skip_build:
         print("=" * 70)
         print("STEP 1: HELIX-BASED SEGMENT MATCHING")
@@ -234,6 +317,10 @@ Examples:
             args.dataset, config,
             score_cut=args.score_cut,
             use_gt_segments=args.use_gt_segments,
+            use_wrangler=(False if args.no_wrangler else None),
+            matching_eff_results=matching_eff_results,
+            data_dir=data_dir,
+            output_name=output_dataset,
         )
         print()
     else:
@@ -246,9 +333,12 @@ Examples:
     print("=" * 70)
     print()
 
-    config['input_dir'] = str(PIPELINE_ROOT / 'data' / 'track_building')
-    evaluated_events, summary, summary_text = run_evaluation(args.dataset, config)
-    save_evaluation_results(evaluated_events, summary, summary_text, args.dataset, eval_output_dir)
+    if data_dir is not None:
+        config['input_dir'] = str(data_dir / 'track_building')
+    else:
+        config['input_dir'] = str(PIPELINE_ROOT / 'data' / 'track_building')
+    evaluated_events, summary, summary_text = run_evaluation(output_dataset, config)
+    save_evaluation_results(evaluated_events, summary, summary_text, output_dataset, eval_output_dir)
 
     print()
     print(summary_text)
@@ -259,7 +349,25 @@ Examples:
     print("=" * 70)
     print()
 
-    run_plotting(evaluated_events, summary, args.dataset, plot_output_dir, config.get('plots', {}))
+    run_plotting(evaluated_events, summary, output_dataset, plot_output_dir, config.get('plots', {}))
+
+    # ── Step 3b: Segment Matching Efficiency ────────────────────────────
+    if matching_eff_results:
+        print()
+        print("=" * 70)
+        print("STEP 3b: SEGMENT MATCHING EFFICIENCY")
+        print("=" * 70)
+        print()
+        print(make_matching_efficiency_summary(matching_eff_results, n_events=None))
+        print()
+        plot_matching_efficiency(
+            matching_eff_results,
+            plot_output_dir,
+            output_dataset,
+            config.get('plots', {}).get('segment_evaluation', {}),
+        )
+    else:
+        print("\n(No segment matching efficiency data — run without --skip-build to compute.)")
 
     # ── Done ────────────────────────────────────────────────────────────
     print()

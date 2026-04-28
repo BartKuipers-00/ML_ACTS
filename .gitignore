@@ -7,9 +7,12 @@ miniconda3/
 .cursor-server/
 .vscode-server/
 
+# Notebooks
+low_pt_gnn_pipeline/hit_density.ipynb
+low_pt_gnn_pipeline/play.ipynb
+
 # Data files
-low_pt_gnn_pipeline/data/
-low_pt_gnn_pipeline/data_0.5-5GeV/
+low_pt_gnn_pipeline/data*/
 # Job files 
 jobs/
 

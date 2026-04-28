@@ -42,7 +42,34 @@ patch_acorn_build_edges()
 
 class MetricLearningWithReduceLROnPlateau(MetricLearning):
     """ use ReduceLROnPlateau and ensure validation metrics are prominently logged to W&B"""
-    
+
+    def _build_particle_only_edges(self, batch):
+        """Build consecutive track edges per particle, ignoring segment boundaries.
+
+        Used when segmented=False in config: all consecutive hits of the same particle
+        (sorted by hit_t) are true edges, including across segment boundaries.
+        """
+        particle_ids = batch.hit_particle_id
+        hit_t = batch.hit_t
+        edges = []
+        unique_particles = particle_ids.unique()
+        unique_particles = unique_particles[unique_particles != 0]  # exclude noise
+        for pid in unique_particles:
+            indices = (particle_ids == pid).nonzero(as_tuple=True)[0]
+            order = hit_t[indices].argsort()
+            sorted_indices = indices[order]
+            if len(sorted_indices) >= 2:
+                edges.append(torch.stack([sorted_indices[:-1], sorted_indices[1:]], dim=0))
+        if not edges:
+            return torch.zeros(2, 0, dtype=torch.long, device=particle_ids.device)
+        return torch.cat(edges, dim=1)
+
+    def get_truth(self, batch, pred_edges, undirected=True):
+        """Override to recompute track_edges when segmented=False. Always undirected."""
+        if not self.hparams.get("segmented", True):
+            batch.track_edges = self._build_particle_only_edges(batch)
+        return super().get_truth(batch, pred_edges, undirected=True)
+
     def train_dataloader(self):
         """Override to add shuffle=True for better training"""
         if self.trainset is None:

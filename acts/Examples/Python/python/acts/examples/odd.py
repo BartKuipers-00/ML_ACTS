@@ -87,12 +87,18 @@ def getOpenDataDetector(
                     geoid.extra += 1
 
         return geoid
-
-    if materialDecorator is None:
-        materialDecorator = acts.examples.RootMaterialDecorator(
-            fileName=str(odd_dir / "data/odd-material-maps.root"),
-            level=customLogLevel(minLevel=acts.logging.WARNING),
-        )
+ 
+    if materialDecorator is None:                   # chanhed verison
+        mat_file = odd_dir / "data/odd-material-maps.root"
+        if mat_file.exists() and mat_file.stat().st_size > 1000:
+            # materialDecorator = acts.examples.RootMaterialDecorator(
+            #     fileName=str(odd_dir / "data/odd-material-maps.root"),
+            #     level=customLogLevel(minLevel=acts.logging.WARNING),
+            # )
+            materialDecorator = acts.examples.RootMaterialDecorator(
+                fileName=str(mat_file),
+                level=customLogLevel(minLevel=acts.logging.WARNING),
+            )
 
     dd4hepConfig = acts.examples.dd4hep.DD4hepDetector.Config(
         xmlFileNames=[str(odd_xml)],

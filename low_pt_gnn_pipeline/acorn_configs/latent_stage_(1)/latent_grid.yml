@@ -13,9 +13,9 @@
 # Grid search parameters (lists = grid, single values = fixed)
 grid_params:
   # Model architecture
-  emb_hidden: [64, 128]        # Hidden layer size
+  emb_hidden: [64, 128,256]        # Hidden layer size
   nb_layer: [5,7]               # Number of layers
-  emb_dim: [7,8]               # Final latent space dimension
+  emb_dim: [8]               # Final latent space dimension
   activation: [Tanh]    # Activation function
 
   # Training parameters
@@ -50,7 +50,7 @@ fixed_params:
   data_split: [50000, 900, 900]
 
   # W&B
-  project: Low_pt_latent_map_MLP_segmented_100_mixed
+  project: Latent_map_MLP_segmented_300_mixed
   use_wandb: true
   wandb_entity: bart_kuipers-nikhef
   wandb_log_every_n_batches: 100
@@ -65,6 +65,7 @@ fixed_params:
   undirected: true
   train_undirected: true
   node_features: [hit_r, hit_phi, hit_z]
+  segmented: true
   node_scales: [1000, 3.14, 500]
 
   # Edge weighting

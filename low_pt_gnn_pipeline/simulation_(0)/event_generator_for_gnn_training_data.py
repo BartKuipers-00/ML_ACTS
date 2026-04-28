@@ -146,10 +146,19 @@ def generate_minimal_training_data(config=None):
     log_level = get_log_level(sim_config['log_level'])
     acts.logging.setLevel(log_level)
 
+    # Mask FLTUND (underflow) FPEs from Bethe-Bloch energy loss for nearly-stopped particles.
+    # Empty string for file matches all files (ends_with("") is always true).
+    fpe_masks = [
+        acts.examples.Sequencer.FpeMask(
+            "", (0, 999999), acts.FpeType.FLTUND, 1000
+        )
+    ]
+
     s = acts.examples.Sequencer(
         events=num_events,
         numThreads=sim_config['num_threads'],
         logLevel=log_level,
+        fpeMasks=fpe_masks,
     )
 
     # Add random number generator

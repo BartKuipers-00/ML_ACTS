@@ -1,6 +1,14 @@
 # Ignore "All data" directory
 all_data/
 
+data_100_mixed/
+
+data_300_mixed/
+
+data_400_muons/
+
+data/
+
 saved_models/
 
 wandb/

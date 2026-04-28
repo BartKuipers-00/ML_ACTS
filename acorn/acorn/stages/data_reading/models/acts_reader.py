@@ -180,13 +180,20 @@ class ActsReader(EventReader):
         # Add global positions
         measurements = self._measurements_add_global_pos(measurements)
 
-        # Add hit and particle id
+        # Add hit and particle id.
+        # simhit_map.hit_id is the SimHitContainer row position (== pandas row
+        # index of the original, unmodified hits.csv).  clean_loops preserves
+        # this as the 'simhit_id' column; fall back to pandas row index for
+        # backwards-compatibility with raw ACTS output that has not been through
+        # clean_loops yet.
         measurements["hit_id"] = measurements["measurement_id"].map(
             dict(zip(simhit_map.measurement_id, simhit_map.hit_id))
         )
-        measurements["particle_id"] = measurements["hit_id"].map(
-            dict(zip(truth.index, truth.particle_id))
-        )
+        if "simhit_id" in truth.columns:
+            simhit_id_to_particle = dict(zip(truth["simhit_id"], truth.particle_id))
+        else:
+            simhit_id_to_particle = dict(zip(truth.index, truth.particle_id))
+        measurements["particle_id"] = measurements["hit_id"].map(simhit_id_to_particle)
 
         return measurements
 

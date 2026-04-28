@@ -53,13 +53,13 @@ class SegmentGNN(nn.Module):
 
     def __init__(
         self,
-        node_in_dim: int = NODE_FEATURE_DIM,
-        hidden_dim: int = 64,
-        emb_dim: int = 32,
-        n_layers: int = 3,
-        dropout: float = 0.0,
-        proj_dim: int = None,
-        proj_layers: int = 1,
+        node_in_dim: int,
+        hidden_dim: int,
+        emb_dim: int,
+        n_layers: int,
+        dropout: float,
+        proj_dim: int,
+        proj_layers: int,
     ):
         super().__init__()
 
@@ -240,7 +240,6 @@ def supcon_loss(
 
     mean_log_prob_pos = (pos_mask * log_prob).sum(dim=1) / n_pos.clamp(min=1)
     return -mean_log_prob_pos[valid].mean()
-
 
 # ─── Model I/O ───────────────────────────────────────────────────────────────
 

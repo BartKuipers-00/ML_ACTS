@@ -35,6 +35,7 @@ sys.path.insert(0, str(WORKSPACE_ROOT / 'acorn'))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.stages.graph_construction.models.metric_learning import MetricLearning
+from low_pt_custom_utils.graph_utils import compute_edge_y
 
 
 def load_config(config_path=None):
@@ -139,72 +140,8 @@ def build_edges_latent(model, graph, node_features, k_max=500, r_max=0.4, device
     return edge_index.cpu(), embeddings.cpu()
 
 
-def compute_edge_truth(edge_index, particle_id, segment_id=None):
-    """
-    Label edges as true (1) or false (0) based on particle IDs and segment IDs.
-    Also compute track_to_edge_map.
 
-    Args:
-        edge_index: Tensor [2, num_edges]
-        particle_id: Tensor [num_hits] with particle ID for each hit
-        segment_id: Optional Tensor [num_hits] with segment ID for each hit.
-                    If provided, edges must share both particle_id AND segment_id
-                    to be labeled as true.
-
-    Returns:
-        edge_y: Tensor [num_edges] with 1 for true edges, 0 for fake edges
-        track_to_edge_map: Tensor [num_tracks, max_edges_per_track] mapping tracks to edges
-    """
-    # Get particle IDs for source and target nodes
-    pid_src = particle_id[edge_index[0]]
-    pid_tgt = particle_id[edge_index[1]]
-
-    # True edge if both hits belong to same particle (and not noise: pid > 0)
-    edge_y = ((pid_src == pid_tgt) & (pid_src > 0)).long()
-
-    # If segment_id provided, additionally require same segment
-    if segment_id is not None:
-        seg_src = segment_id[edge_index[0]]
-        seg_tgt = segment_id[edge_index[1]]
-        edge_y = edge_y * (seg_src == seg_tgt).long()
-
-    # Build track_to_edge_map: for each track (or segment), list which edges belong to it
-    if segment_id is not None:
-        # Group by (particle_id, segment_id) — each segment is a separate track
-        composite_id = particle_id * 1000 + segment_id
-        composite_src = composite_id[edge_index[0]]
-        composite_tgt = composite_id[edge_index[1]]
-        unique_ids = composite_id.unique()
-        unique_ids = unique_ids[unique_ids > 0]  # Remove noise (pid=0 → composite=0)
-        num_tracks = len(unique_ids)
-
-        track_to_edge_list = []
-        for cid in unique_ids:
-            track_edges = ((composite_src == cid) & (composite_tgt == cid)).nonzero(as_tuple=True)[0]
-            track_to_edge_list.append(track_edges)
-    else:
-        unique_pids = particle_id.unique()
-        unique_pids = unique_pids[unique_pids > 0]  # Remove noise
-        num_tracks = len(unique_pids)
-
-        track_to_edge_list = []
-        for pid in unique_pids:
-            track_edges = ((pid_src == pid) & (pid_tgt == pid)).nonzero(as_tuple=True)[0]
-            track_to_edge_list.append(track_edges)
-
-    # Pad to same length
-    if len(track_to_edge_list) > 0:
-        max_edges = max([len(te) for te in track_to_edge_list])
-        track_to_edge_map = torch.full((num_tracks, max_edges), -1, dtype=torch.long)
-        for i, track_edges in enumerate(track_to_edge_list):
-            track_to_edge_map[i, :len(track_edges)] = track_edges
-    else:
-        track_to_edge_map = torch.empty((0, 0), dtype=torch.long)
-
-    return edge_y, track_to_edge_map
-
-
-def process_event(model, node_features, input_path, output_path, truth_csv_path, k_max=500, r_max=0.4, device='cpu'):
+def process_event(model, node_features, input_path, output_path, truth_csv_path, k_max=500, r_max=0.4, device='cpu', config=None):
     """Process a single event file using learned embeddings"""
     graph = torch.load(input_path)
 
@@ -237,15 +174,29 @@ def process_event(model, node_features, input_path, output_path, truth_csv_path,
 
     # Build candidate edges using learned embeddings
     edge_index, embeddings = build_edges_latent(model, graph, node_features, k_max, r_max, device)
-    
-    # Compute truth labels and track-to-edge mapping (segment-aware if available)
-    hit_segment_ids = graph.hit_segment_id.long() if hasattr(graph, 'hit_segment_id') else None
-    edge_y, track_to_edge_map = compute_edge_truth(edge_index, hit_particle_ids, hit_segment_ids)
-    
+
+    # Remove same-layer edges: hits with |Δr| < dr_same_layer_cut are on the same detector layer
+    dr_same_layer_cut = config.get('dr_same_layer_cut', None) if config else None
+    if dr_same_layer_cut is not None:
+        hit_r = torch.tensor(np.sqrt(truth_df['x'].values**2 + truth_df['y'].values**2), dtype=torch.float32)
+        dr = torch.abs(hit_r[edge_index[0]] - hit_r[edge_index[1]])
+        edge_index = edge_index[:, dr >= dr_same_layer_cut]
+
+    # Compute truth labels
+    segmented = config.get('segmented', True) if config else True
+    one_in_one_out = config.get('one_in_one_out', False) if config else False
+    hit_segment_ids = graph.hit_segment_id.long() if (hasattr(graph, 'hit_segment_id') and segmented) else None
+    edge_y = compute_edge_y(
+        edge_index,
+        hit_particle_ids,
+        graph.track_edges,
+        segment_id=hit_segment_ids,
+        one_in_one_out=one_in_one_out,
+    )
+
     # Add to graph
     graph.edge_index = edge_index
     graph.edge_y = edge_y
-    graph.track_to_edge_map = track_to_edge_map
     graph.particle_id = hit_particle_ids
     graph.embeddings = embeddings  # Store embeddings for analysis
     
@@ -269,7 +220,13 @@ def run_graph_construction(model, hparams, config):
     k_max = config['k_max']
     r_max = config['r_max']
     device = config.get('device', 'cpu')
-    datasets = config.get('datasets', ['trainset', 'valset', 'testset'])
+    datasets_config = config.get('datasets', ['trainset', 'valset', 'testset'])
+    if isinstance(datasets_config, dict):
+        datasets = list(datasets_config.keys())
+        dataset_limits = datasets_config
+    else:
+        datasets = datasets_config
+        dataset_limits = {}
     node_features = hparams['node_features']
 
     print(f"Input:  {input_dir}")
@@ -292,12 +249,17 @@ def run_graph_construction(model, hparams, config):
         
         # Get all event files
         event_files = sorted([f.name for f in input_dataset_dir.glob('*-graph.pyg')])
-        
+
         if len(event_files) == 0:
             print(f"Skipping {dataset_name} - no graph files found")
             continue
-        
-        print(f"\nProcessing {dataset_name}: {len(event_files)} events")
+
+        limit = dataset_limits.get(dataset_name)
+        if limit is not None and len(event_files) > limit:
+            event_files = event_files[:limit]
+            print(f"\nProcessing {dataset_name}: {len(event_files)} events (limited to {limit})")
+        else:
+            print(f"\nProcessing {dataset_name}: {len(event_files)} events")
         
         total_nodes = 0
         total_edges = 0
@@ -310,7 +272,7 @@ def run_graph_construction(model, hparams, config):
             truth_csv_path = str(input_path).replace('-graph.pyg', '-truth.csv')
             
             num_nodes, num_edges, num_true = process_event(
-                model, node_features, input_path, output_path, truth_csv_path, k_max, r_max, device
+                model, node_features, input_path, output_path, truth_csv_path, k_max, r_max, device, config=config
             )
             total_nodes += num_nodes
             total_edges += num_edges

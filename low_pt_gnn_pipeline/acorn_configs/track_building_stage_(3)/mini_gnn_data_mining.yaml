@@ -7,7 +7,7 @@
 # are actually loaded via its own data_split.
 
 # Number of events to mine from each split: [trainset, valset, testset]
-data_split: [30000, 900, 900]
+data_split: [10000, 1000, 1000]
 
 # Input directory containing GNN-inferred graphs
 input_dir: data/gnn_stage
@@ -19,7 +19,8 @@ precomputed_dir: data/track_building/mini_gnn_segments
 # SEGMENT EXTRACTION
 # ============================================================================
 
-score_cut: 0.85          # Edge score threshold for CC clustering
+score_cut: 0.4         # Edge score threshold for CC clustering
+use_wrangler: true       # Match inference pipeline (CC + wrangler disentanglement)
 
 # ============================================================================
 # NODE FEATURES

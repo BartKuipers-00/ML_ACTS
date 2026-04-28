@@ -1,0 +1,50 @@
+# Segment Evaluation Configuration
+# Used by track_building_stage_(3)/evaluate_segments.py
+#
+# Evaluates CC/Wrangler segment purity and completeness against ground truth
+# segments — BEFORE any matching stage.
+
+# Dataset parameters  [n_trainset, n_valset, n_testset]
+data_split: [0, 100, 1000]
+
+# Input: GNN-scored graphs (need edge_scores for CC, hit_segment_id for GT)
+input_dir: data/gnn_stage
+
+# ============================================================================
+# SEGMENT EXTRACTION
+# ============================================================================
+
+use_gt_segments: false  # true = use hit_segment_id as proposed segments too
+score_cut: 0.4          # CC edge score threshold
+use_wrangler: true      # false = plain CC without disentanglement
+
+# ============================================================================
+# FIDUCIAL CUTS ON TRUE SEGMENTS
+# ============================================================================
+
+target_segments:
+  pt:    [0.1, .inf]
+  nhits: [3,   .inf]
+
+# ============================================================================
+# PLOT CONFIGURATION
+# ============================================================================
+
+plots:
+  segment_evaluation:
+    title: Segment Purity & Completeness (CC + Wrangler)
+    font_sizes:
+      axis_label: 18
+      tick_label: 14
+      legend: 14
+      title: 18
+    variables:
+      pt:
+        x_label: '$p_T$ [GeV]'
+        x_lim: [0.1, 0.5]
+        y_lim: [0.0, 1.05]
+        n_bins: 30
+      eta:
+        x_label: '$\eta$'
+        y_lim: [0.0, 1.05]
+        n_bins: 30   # x-range derived dynamically from data

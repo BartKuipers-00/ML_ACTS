@@ -3,25 +3,29 @@
 # Matches segments from the same particle via helix parameter comparison
 
 # Dataset parameters
-data_split: [0, 0, 900]
+data_split: [0, 10, 1000]
 
 # Input/output
 input_dir: data/gnn_stage
 stage_dir: data/track_building
+output_dir: helix            # suffix appended to output dirs, e.g. "helix_GT" → testset_helix_GT
+
+
 
 # ============================================================================
 # SEGMENT EXTRACTION
 # ============================================================================
 
-use_gt_segments: true  # true = use hit_segment_id, false = use CC clusters
-score_cut: 0.85          # Edge score threshold for CC clustering
+use_gt_segments: false    # true = use hit_segment_id, false = use CC clusters
+use_wrangler: true       # true = CC + Wrangler walk-through before helix fitting
+score_cut: 0.4           # Edge score threshold for CC clustering
 
 # ============================================================================
 # HELIX FITTING
 # ============================================================================
 
-B_field: 2.0            # Magnetic field strength (Tesla)
-outlier_rejection: true  # Iterative outlier rejection in circle fit
+B_field: 2.0             # Magnetic field strength (Tesla)
+outlier_rejection: false  # Iterative outlier rejection in circle fit
 
 # ============================================================================
 # SEGMENT MATCHING
@@ -32,18 +36,18 @@ matching:
   outer_r_threshold: 1000.0   # mm — segments with outer_r >= this are complete tracks
 
   # Hard cuts (reject pairs violating these)
-  max_center_distance: 100.0  # mm [ maximum circle center distance between segments
-  min_R_ratio: 0.5            # minimum R_min/R_max ratio
+  max_center_distance: 60.0   # mm — tuned via tune_segment_matching.py
+  min_R_ratio: 0.65           # tuned
 
   # Soft score Gaussian widths
-  sigma_center: 30.0          # mm 
-  sigma_R: 0.1               
-  sigma_pitch: 0.01           
+  sigma_center: 40.0          # mm — tuned
+  sigma_R: 0.05               # tuned
+  sigma_pitch: 0.12           # tuned
 
-  # Score weights
-  weight_center: 0.5         
-  weight_R: 0.5             
-  weight_pitch: 0.5         
+  # Score weights  (sum = 1; normalised internally but kept explicit)
+  weight_center: 0.45         # tuned
+  weight_R: 0.08              # tuned
+  weight_pitch: 0.47          # tuned (auto-coupled: 1 - weight_center - weight_R)
 
 # ============================================================================
 # EVALUATION PARAMETERS
@@ -51,14 +55,20 @@ matching:
 
 matching_fraction: 0.7
 matching_style: two_way
-min_track_length: 4
+min_track_length: 5
 
 target_tracks:
     pt: [0.1, .inf]
-    nhits: [4, .inf]
+    nhits: [7, .inf]        #reconstructable
+
+target_segments:
+    pt: [0.1, .inf]
+    min_segment_hits: 2       # each individual segment must have at least this many hits
 
 # Plot configuration
 plots:
+  segment_evaluation:
+    min_bin_fraction: 0.001   # suppress bins with < this fraction of the peak-bin count
   tracking_efficiency:
     title: Track Reconstruction Efficiency (Helix Matching)
     font_sizes:

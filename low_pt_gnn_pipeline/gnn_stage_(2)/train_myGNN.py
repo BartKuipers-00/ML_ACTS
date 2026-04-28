@@ -6,7 +6,7 @@ import yaml
 from pathlib import Path
 import torch
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import Callback, ModelCheckpoint, EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import CSVLogger, WandbLogger
 
 
@@ -19,11 +19,10 @@ sys.path.insert(0, str(PIPELINE_ROOT))
 from acorn.core.core_utils import get_stage_module
 from acorn.utils.loading_utils import add_variable_name_prefix_in_config
 from acorn.stages.edge_classifier.models.interaction_gnn import InteractionGNN
-import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 
 
-class WeightedInteractionGNN(InteractionGNN):
+class WandbInteractionGNN(InteractionGNN):
 
     def train_dataloader(self):
         """Override to enable shuffling for better gradient accumulation."""
@@ -31,7 +30,7 @@ class WeightedInteractionGNN(InteractionGNN):
             return None
         num_workers = self.hparams.get("num_workers", [1, 1, 1])[0]
         return DataLoader(self.trainset, batch_size=1, num_workers=num_workers, shuffle=True)
-    
+
     def training_step(self, batch, batch_idx):
         """Override to enable batch-level logging (on_step=True) for W&B."""
         output = self(batch)
@@ -48,134 +47,10 @@ class WeightedInteractionGNN(InteractionGNN):
 
         return scaled_loss
 
-    def loss_function(self, output, batch, balance="proportional"):
-        """Override to apply pos_weight to positive loss, otherwise same as parent."""
-        # Compute losses same as parent
-        negative_mask = ((batch.edge_y == 0) & (batch.edge_weights != 0)) | (
-            batch.edge_weights < 0
-        )
-        positive_mask = (batch.edge_y == 1) & (batch.edge_weights > 0)
-
-        negative_loss = F.binary_cross_entropy_with_logits(
-            output[negative_mask],
-            torch.zeros_like(output[negative_mask]),
-            weight=batch.edge_weights[negative_mask].abs(),
-            reduction="sum",
-        )
-
-        positive_loss = F.binary_cross_entropy_with_logits(
-            output[positive_mask],
-            torch.ones_like(output[positive_mask]),
-            weight=batch.edge_weights[positive_mask].abs(),
-            reduction="sum",
-        )
-        
-        # Apply pos_weight to positive loss if set in config
-        pos_weight = self.hparams.get("pos_weight")
-        positive_loss = positive_loss * pos_weight
-
-        # Rest is identical to parent
-        if balance == "proportional":
-            sow = batch.edge_weights.abs().sum()
-            return (
-                (positive_loss + negative_loss) / sow,
-                positive_loss.detach() / sow,
-                negative_loss.detach() / sow,
-            )
-        else:
-            n_pos, n_neg = positive_mask.sum(), negative_mask.sum()
-            sow = (
-                batch.edge_weights[positive_mask].abs().sum() / n_pos
-                + batch.edge_weights[negative_mask].abs().sum() / n_neg
-            )
-            return (
-                (positive_loss / n_pos + negative_loss / n_neg) / sow,
-                positive_loss.detach() / n_pos / sow,
-                negative_loss.detach() / n_neg / sow,
-            )
-
-
-class LossPrinterCallback(Callback):
-    
-    def __init__(self):
-        super().__init__()
-        self.train_losses = []
-        self.val_losses = []
-    
-    def on_train_epoch_start(self, trainer, pl_module):
-        """Print learning rate at the start of each epoch."""
-        if trainer.optimizers:
-            current_lr = trainer.optimizers[0].param_groups[0]['lr']
-            print(f" Learning Rate: {current_lr:.6f}")
-    
-    def on_train_epoch_end(self, trainer, pl_module):
-        # Get the training loss from the logged metrics
-        if 'train_loss' in trainer.callback_metrics:
-            loss = trainer.callback_metrics['train_loss'].item()
-            self.train_losses.append(loss)
-            
-            # Report GPU memory usage for finding optimal settings 
-            # if torch.cuda.is_available():
-            #     mem_allocated = torch.cuda.memory_allocated(0) / 1024**3
-            #     mem_reserved = torch.cuda.memory_reserved(0) / 1024**3
-            #     mem_max = torch.cuda.max_memory_allocated(0) / 1024**3
-            # else:
-            #     mem_allocated = mem_reserved = mem_max = 0
-            
-            print(f"\n{'='*70}")
-            print(f"Epoch {trainer.current_epoch} Training Loss: {loss:.6f}")
-            # if torch.cuda.is_available():
-            #     print(f"GPU Memory: Allocated={mem_allocated:.2f}GB, Reserved={mem_reserved:.2f}GB, Peak={mem_max:.2f}GB")
-            # print(f"{'='*70}\n")
-    
-    def on_validation_epoch_end(self, trainer, pl_module):
-        # Get the validation loss
-        if 'val_loss' in trainer.callback_metrics:
-            loss = trainer.callback_metrics['val_loss'].item()
-            self.val_losses.append(loss)
-            
-            # GPU memory usage
-            # if torch.cuda.is_available():
-            #     mem_allocated = torch.cuda.memory_allocated(0) / 1024**3
-            #     mem_reserved = torch.cuda.memory_reserved(0) / 1024**3
-            # else:
-            #     mem_allocated = mem_reserved = 0
-                
-            print(f"\n{'='*70}")
-            print(f"Epoch {trainer.current_epoch} Validation Loss: {loss:.6f}")
-            # if torch.cuda.is_available():
-            #     print(f"GPU Memory: Allocated={mem_allocated:.2f}GB, Reserved={mem_reserved:.2f}GB")
-            # print(f"{'='*70}\n")
-    
-    def on_train_end(self, trainer, pl_module):
-        print(f"\n{'='*70}")
-        print("TRAINING SUMMARY")
-        print(f"{'='*70}")
-        print(f"{'Epoch':<10} {'Train Loss':<15} {'Val Loss':<15}")
-        print(f"{'-'*70}")
-        for i, (train_loss, val_loss) in enumerate(zip(self.train_losses, self.val_losses)):
-            print(f"{i:<10} {train_loss:<15.6f} {val_loss:<15.6f}")
-        print(f"{'='*70}\n")
-
-
 def main():
     
     # Parse arguments
-    parser = argparse.ArgumentParser(
-        description='Train GNN edge classifier',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python train_myGNN.py        # Train from scratch               
-  python train_myGNN.py --resume data/gnn_stage/checkpoints/gnn_best_val_loss_val_loss=0.0026.ckpt         # Resume training from checkpoint
-        """
-    )
-    parser.add_argument(
-        '--resume',
-        type=str,
-        default=None,
-        help='Path to checkpoint file to resume training from'
-    )
+    parser = argparse.ArgumentParser(description='Train GNN edge classifier')
     parser.add_argument(
         '--config',
         type=str,
@@ -205,12 +80,6 @@ Examples:
     if not config_file.exists():
         raise FileNotFoundError(f"Config file not found: {config_file}")
     
-    if args.resume:
-        resume_path = Path(args.resume)
-        if not resume_path.exists():
-            raise FileNotFoundError(f"Checkpoint not found: {resume_path}")
-        print(f"Resuming training from: {resume_path}\n")
-    
     print(f"Loading config from: {config_file}\n")
     
     # Load config
@@ -232,7 +101,7 @@ Examples:
     print("="*70)
     
 
-    stage_module_class = WeightedInteractionGNN
+    stage_module_class = WandbInteractionGNN
     
     # Setup stage directory
     os.makedirs(config["stage_dir"], exist_ok=True)
@@ -248,9 +117,6 @@ Examples:
         stage_module._hparams = add_variable_name_prefix_in_config(
             stage_module._hparams
         )
-    
-    # Create custom trainer with loss printer
-    loss_printer = LossPrinterCallback()
     
     # Create checkpoint callback to save best model
     checkpoint_callback = ModelCheckpoint(
@@ -288,12 +154,13 @@ Examples:
         devices=config.get("devices", 1),
         num_nodes=config.get("nodes", 1),
         max_epochs=config["max_epochs"],
-        callbacks=[loss_printer, checkpoint_callback, early_stopping],
+        callbacks=[checkpoint_callback, early_stopping],
         logger=loggers,
         log_every_n_steps=config.get("wandb_log_every_n_batches", 1),  # Control logging frequency
         check_val_every_n_epoch=config.get("check_val_every_n_epoch", 1),
         val_check_interval=config.get("val_check_interval"),  # Check validation within epochs (e.g., 0.5 = every 50%)
         accumulate_grad_batches=config.get("accumulate_grad_batches", 1),
+        precision=config.get("precision", 32),
         enable_progress_bar=True,
         enable_model_summary=True,
     )
@@ -302,8 +169,7 @@ Examples:
     print("STARTING TRAINING")
     print("="*70 + "\n")
     
-    # Train (with optional resume)
-    trainer.fit(stage_module, ckpt_path=args.resume)
+    trainer.fit(stage_module)
     
     print("\n" + "="*70)
     print("TRAINING COMPLETE!")

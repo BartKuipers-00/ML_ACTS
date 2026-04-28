@@ -6,7 +6,7 @@ stage: track_building
 model: ConnectedComponents  # Options: ConnectedComponents, Walkthrough, CCandWalk, etc.
 
 # Dataset parameters
-data_split: [0, 1000, 0] 
+data_split: [0, 10, 0] 
 
 
 # ============================================================================

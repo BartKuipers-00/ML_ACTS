@@ -1,0 +1,30 @@
+param_grid:
+  matching.max_center_distance: [40.0, 60.0, 80.0]       # interior at 60 ✓
+  matching.min_R_ratio:         [0.35, 0.50, 0.65]       # interior at 0.5 ✓
+  matching.sigma_center:        [40.0, 55.0, 70.0]       # was upper boundary at 40 — extend up
+  matching.sigma_R:             [0.01, 0.03, 0.05]       # was lower boundary at 0.05 — extend down
+  matching.sigma_pitch:         [0.12, 0.16, 0.20]       # was upper boundary at 0.12 — extend up
+  matching.weight_center:       [0.30, 0.35, 0.45]       # was lower boundary at 0.45 — extend down
+  matching.weight_R:            [0.08, 0.11, 0.14]       # was upper boundary at 0.08 — extend up
+
+use_gt_segments: true
+use_wrangler: false
+score_cut: 0.5
+
+B_field: 2.0
+outlier_rejection: true
+
+matching:
+  outer_r_threshold: 1000.0  
+
+matching_fraction: 0.7
+matching_style: two_way
+min_track_length: 5
+
+target_tracks:
+  pt: [0.1, .inf]
+  nhits: [7, .inf]
+
+target_segments:
+  pt: [0.1, .inf]
+  min_segment_hits: 2

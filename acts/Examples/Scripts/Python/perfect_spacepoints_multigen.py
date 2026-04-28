@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-
 Configuration is loaded from Examples/Configs/perfect-spacepoints-multigen-config.json
 """
 
@@ -13,7 +12,7 @@ import acts
 import acts.examples
 import acts.examples.hepmc3
 from acts import UnitConstants as u
-from acts.examples import GenericDetector, RootParticleReader, RootParticleWriter
+from acts.examples import GenericDetector, RootParticleWriter
 
 from acts.examples.simulation import (
     addFatras,

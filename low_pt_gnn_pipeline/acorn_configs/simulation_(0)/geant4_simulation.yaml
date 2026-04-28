@@ -1,0 +1,82 @@
+# ============================================================================
+# GEANT4 SIMULATION CONFIGURATION
+# ============================================================================
+# Used by simulation_(0)/geant4_event_generator.py
+#
+# Output CSV format is identical to event_generator_for_gnn_training_data.py
+# so clean_loops_and_attribute_segments.py and the PyG conversion work as-is.
+#
+# Key difference vs. FATRAS config:
+#   - No loop_fraction / max_steps; use kill_after_time_ns instead.
+#     Geant4 propagates particles with full physics until they exit the
+#     detector or until kill_after_time_ns nanoseconds have elapsed.
+#   - Uses OpenDataDetector (ODD) instead of GenericDetector.
+#     If switching datasets, update region_labels and detector_path in
+#     acorn_configs/latent_stage_(1)/convert_csv_to_pyg_sets.yaml.
+# ============================================================================
+
+num_events: 10
+particles_per_vertex: 100  # Per species, per vertex
+multiplicity: 1            # Collision vertices per event
+random_seed: 42
+
+# ============================================================================
+# PARTICLE GUN (multi-species, same as event_generator_simulation.yaml)
+# ============================================================================
+particle_gun:
+  # List one or more species: muon, pion, electron, proton, kaon, photon
+  particle_types: ["pion"]
+  # particle_types: ["muon", "pion", "electron", "proton"]
+
+  randomize_charge: true
+
+  momentum:
+    min: 0.1
+    max: 0.5
+    transverse: true   # pT range (not total momentum)
+
+  eta:
+    min: -0.15
+    max:  0.15
+    uniform: true
+
+  phi:
+    min: 0.0
+    max: 360.0
+
+# ============================================================================
+# DETECTOR & FIELD
+# ============================================================================
+detector:
+  type: "OpenDataDetector"   # ODD required for Geant4; GenericDetector not supported
+  # material_map: "/path/to/odd-material-maps.root"  # defaults to ODD bundled map
+
+magnetic_field:
+  strength: 2.0   # Tesla, along z-axis
+
+# ============================================================================
+# SIMULATION
+# ============================================================================
+simulation:
+  log_level: "INFO"
+
+  # Particles are killed when they leave the detector OR after this many ns.
+  # Replaces loop_fraction from the FATRAS config.
+  # 25 ns ≈ one full loop for a 0.1 GeV pion in 2 T field (r ≈ 167 mm).
+  # 40 ns gives particles extra time to complete loops.
+  kill_after_time_ns: 40.0
+
+# ============================================================================
+# DIGITIZATION
+# ============================================================================
+digitization:
+  # Path relative to acts_new/ installation directory.
+  # ODD uses the odd-digi-smearing-config (not generic-digi-smearing-config).
+  config_file: "Examples/Configs/odd-digi-smearing-config.json"
+
+# ============================================================================
+# OUTPUT
+# ============================================================================
+output:
+  base_dir: "./data_geant"    # Relative to pipeline root; csv/ subdirectory created
+  write_geometry: true       # Write detectors.csv for downstream ACORN reader

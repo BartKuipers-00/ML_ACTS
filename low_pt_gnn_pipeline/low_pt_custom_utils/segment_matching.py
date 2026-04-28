@@ -40,10 +40,10 @@ def extract_segments_from_ground_truth(graph) -> List[SegmentInfo]:
     Extract segments using ground truth hit_segment_id and hit_particle_id.
 
     Each unique (particle_id, segment_id) pair with particle_id > 0 forms a segment.
-    Hits are ordered by time (hit_t).
+    Hits are ordered by radial position (hit_r) outward.
 
     Args:
-        graph: PyG Data object with hit_segment_id, hit_particle_id, hit_t,
+        graph: PyG Data object with hit_segment_id, hit_particle_id,
                hit_x, hit_y, hit_z, hit_r.
 
     Returns:
@@ -62,7 +62,6 @@ def extract_segments_from_ground_truth(graph) -> List[SegmentInfo]:
 
     particle_ids = np.asarray(graph.hit_particle_id.cpu().numpy(), dtype=np.int64)
     segment_ids = np.asarray(graph.hit_segment_id.cpu().numpy(), dtype=np.int64)
-    times = np.asarray(graph.hit_t.cpu().numpy(), dtype=np.float64)
     x = np.asarray(graph.hit_x.cpu().numpy(), dtype=np.float64)
     y = np.asarray(graph.hit_y.cpu().numpy(), dtype=np.float64)
     z = np.asarray(graph.hit_z.cpu().numpy(), dtype=np.float64)
@@ -84,9 +83,9 @@ def extract_segments_from_ground_truth(graph) -> List[SegmentInfo]:
         mask = composite_ids == cid
         hit_indices = signal_indices[mask]
 
-        # Order by time
-        time_order = np.argsort(times[hit_indices])
-        hit_indices = hit_indices[time_order]
+        # Order by radial position outward
+        r_order = np.argsort(r[hit_indices])
+        hit_indices = hit_indices[r_order]
 
         seg = _build_segment_info(hit_indices.tolist(), x, y, z, r, cluster_id=int(cid))
         segments.append(seg)
@@ -99,10 +98,10 @@ def extract_segments_from_cc(graph, score_cut: float) -> List[SegmentInfo]:
     Extract segments via Connected Components clustering on GNN edge scores.
 
     Each CC cluster is treated as one segment. Single isolated nodes are skipped.
-    Hits within each segment are ordered by time (hit_t).
+    Hits within each segment are ordered by radial position (hit_r) outward.
 
     Args:
-        graph: PyG Data object with edge_index, edge_scores, hit_t,
+        graph: PyG Data object with edge_index, edge_scores,
                hit_x, hit_y, hit_z, hit_r.
         score_cut: Threshold for edge score filtering.
 
@@ -130,7 +129,6 @@ def extract_segments_from_cc(graph, score_cut: float) -> List[SegmentInfo]:
     labels[node_mask] = torch.tensor(candidate_labels, dtype=torch.long)
     labels = labels.numpy()
 
-    times = np.asarray(graph.hit_t.cpu().numpy(), dtype=np.float64)
     x = np.asarray(graph.hit_x.cpu().numpy(), dtype=np.float64)
     y = np.asarray(graph.hit_y.cpu().numpy(), dtype=np.float64)
     z = np.asarray(graph.hit_z.cpu().numpy(), dtype=np.float64)
@@ -143,9 +141,9 @@ def extract_segments_from_cc(graph, score_cut: float) -> List[SegmentInfo]:
         if len(hit_indices) < 1:
             continue
 
-        # Order by time
-        time_order = np.argsort(times[hit_indices])
-        hit_indices = hit_indices[time_order]
+        # Order by radial position outward
+        r_order = np.argsort(r[hit_indices])
+        hit_indices = hit_indices[r_order]
 
         seg = _build_segment_info(hit_indices.tolist(), x, y, z, r, cluster_id=cluster_id)
         segments.append(seg)
@@ -283,9 +281,13 @@ def compute_matching_score(
     score_center = np.exp(-center_dist**2 / (2 * sigma_center**2))
     score_R = np.exp(-(R_ratio - 1.0)**2 / (2 * sigma_R**2))
 
-    # Pitch score (if both have valid pitch fits)
+    # Pitch score (if both have valid pitch fits).
+    # Compare |pitch| magnitudes: the wrangler walk reverses arc2's hit order
+    # (radially outward), making its dz/ds negative while arc1's is positive.
+    # Both arcs of the same helix have the same |pitch|, so magnitude comparison
+    # is correct regardless of extraction method.
     if helix_a.pitch is not None and helix_b.pitch is not None:
-        dpitch = abs(helix_a.pitch - helix_b.pitch)
+        dpitch = abs(abs(helix_a.pitch) - abs(helix_b.pitch))
         score_pitch = np.exp(-dpitch**2 / (2 * sigma_pitch**2))
     else:
         score_pitch = 1.0  # Neutral if pitch unavailable
@@ -374,6 +376,80 @@ def match_segments(
     return matched_tracks, unmatched
 
 
+# ─── Geometric Pair Cut ────────────────────────────────────────────────────
+
+
+def precompute_high_r_hits(
+    segments: List["SegmentInfo"],
+    graph,
+    r_high: float,
+) -> List[Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    """
+    Pre-sort each segment's hits by r and retain only those above r_high.
+
+    Call once per event before the pair loop so each segment is processed O(1) times
+    rather than O(n) times (once per pair).
+
+    Returns:
+        List of (rs, xs, ys, zs) arrays, one entry per segment.
+        Arrays are empty if the segment has no hits above r_high.
+    """
+    hr = graph.hit_r.numpy()
+    hx = graph.hit_x.numpy()
+    hy = graph.hit_y.numpy()
+    hz = graph.hit_z.numpy()
+
+    result = []
+    for seg in segments:
+        idx   = np.array(seg.hits)
+        order = np.argsort(hr[idx])
+        rs    = hr[idx][order]
+        mask  = rs > r_high
+        result.append((rs[mask], hx[idx][order][mask],
+                        hy[idx][order][mask], hz[idx][order][mask]))
+    return result
+
+
+def passes_geometric_cut(
+    hi: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    hj: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    r_tol: float,
+    cut_mm: float,
+) -> bool:
+    """
+    Return True if the segment pair is geometrically compatible (should be kept).
+
+    Computes the minimum 3D distance between nearest-r matched hits at r > r_high
+    (pre-filtered by ``precompute_high_r_hits``).  A pair is vetoed (returns False)
+    when at least one overlapping layer exists AND the minimum 3D separation there
+    is smaller than ``cut_mm``.
+
+    Conservative by design: if either segment has no high-r hits, or there are no
+    overlapping layers, the pair passes (True) — no information means no veto.
+
+    Args:
+        hi, hj:  (rs, xs, ys, zs) arrays from ``precompute_high_r_hits``.
+        r_tol:   Max |r_A - r_B| to consider two hits co-layer (mm).
+        cut_mm:  Minimum required 3D separation at overlapping layers (mm).
+    """
+    ri, xi, yi, zi = hi
+    rj, xj, yj, zj = hj
+    if len(ri) == 0 or len(rj) == 0:
+        return True   # no high-r hits on one side — can't veto
+
+    dr      = np.abs(ri[:, None] - rj[None, :])   # (Hi, Hj)
+    nearest = np.argmin(dr, axis=1)                # (Hi,)
+    mask    = dr[np.arange(len(ri)), nearest] < r_tol
+    if not mask.any():
+        return True   # no overlapping layers — can't veto
+
+    n_idx = nearest[mask]
+    dx = xi[mask] - xj[n_idx]
+    dy = yi[mask] - yj[n_idx]
+    dz = zi[mask] - zj[n_idx]
+    return float(np.min(np.sqrt(dx**2 + dy**2 + dz**2))) >= cut_mm
+
+
 # ─── Track Assembly ────────────────────────────────────────────────────────
 
 
@@ -435,7 +511,11 @@ def segments_to_track_labels(
 # ─── High-Level Entry Point ────────────────────────────────────────────────
 
 
-def build_tracks_for_event(graph, config: dict) -> Tuple[torch.Tensor, dict]:
+def build_tracks_for_event(
+    graph,
+    config: dict,
+    return_matching_info: bool = False,
+) -> Tuple[torch.Tensor, dict]:
     """
     Build tracks for a single event using helix-based segment matching.
 
@@ -448,20 +528,30 @@ def build_tracks_for_event(graph, config: dict) -> Tuple[torch.Tensor, dict]:
     Args:
         graph: PyG Data object from data/gnn_stage/.
         config: Configuration dict with all parameters.
+        return_matching_info: If True, return a third element — a dict with
+            'segments', 'matched_tracks', and 'unmatched' — for downstream
+            matching-efficiency evaluation.
 
     Returns:
         hit_track_labels: Tensor of shape (num_nodes,).
         stats: Dict with statistics about the matching.
+        matching_info (only if return_matching_info=True): dict with keys
+            'segments', 'matched_tracks', 'unmatched'.
     """
     use_gt = config.get("use_gt_segments", False)
     score_cut = config.get("score_cut", 0.5)
+    use_wrangler = config.get("use_wrangler", False)
     B_field = config.get("B_field", 2.0)
     outlier_rejection = config.get("outlier_rejection", False)
     matching_config = config.get("matching", {})
 
     # Step 1: Extract segments
+    n_wrangler_splits = 0
     if use_gt:
         segments = extract_segments_from_ground_truth(graph)
+    elif use_wrangler:
+        from low_pt_custom_utils.wrangler_utils import extract_segments_with_wrangler
+        segments, n_wrangler_splits = extract_segments_with_wrangler(graph, score_cut)
     else:
         segments = extract_segments_from_cc(graph, score_cut)
 
@@ -494,6 +584,7 @@ def build_tracks_for_event(graph, config: dict) -> Tuple[torch.Tensor, dict]:
 
     stats = {
         "n_segments": n_segments,
+        "n_wrangler_splits": n_wrangler_splits,
         "n_good_fits": n_good_fits,
         "n_poor_fits": n_poor_fits,
         "n_no_fits": n_no_fits,
@@ -505,5 +596,13 @@ def build_tracks_for_event(graph, config: dict) -> Tuple[torch.Tensor, dict]:
         "n_assigned_hits": n_assigned,
         "n_unassigned_hits": n_unassigned,
     }
+
+    if return_matching_info:
+        matching_info = {
+            "segments": segments,
+            "matched_tracks": matched_tracks,
+            "unmatched": unmatched,
+        }
+        return labels, stats, matching_info
 
     return labels, stats

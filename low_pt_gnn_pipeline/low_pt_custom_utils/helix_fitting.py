@@ -156,7 +156,7 @@ def compute_arc_lengths(
     """
     Compute cumulative arc lengths along a fitted circle.
 
-    Points must be in trajectory order (e.g., sorted by time).
+    Points must be in trajectory order (e.g., sorted by radial position outward).
     Arc length between consecutive points is R * |delta_theta|.
 
     Args:

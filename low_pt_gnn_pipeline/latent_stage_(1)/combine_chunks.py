@@ -103,12 +103,9 @@ def main():
     print()
 
     if len(all_events) < total_requested:
-        print(f"WARNING: Only {len(all_events)} events available, but {total_requested} requested")
-        print(f"Adjusting split proportionally...")
-        ratio = len(all_events) / total_requested
-        train_size = int(train_size * ratio)
-        val_size = int(val_size * ratio)
-        test_size = len(all_events) - train_size - val_size
+        print(f"ERROR: Requested split {train_size}+{val_size}+{test_size}={total_requested} events, "
+              f"but only {len(all_events)} events are available.")
+        return
 
     train_events = all_events[:train_size]
     val_events = all_events[train_size:train_size + val_size]

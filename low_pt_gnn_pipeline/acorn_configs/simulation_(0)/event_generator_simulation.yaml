@@ -1,8 +1,8 @@
 # ============================================================================
 # EVENT CONFIGURATION
 # ============================================================================
-num_events: 102000
-particles_per_vertex: 25 # Particles generated at each collision vertex
+num_events: 500 #14000 #12000
+particles_per_vertex: 75   # Particles generated at each collision vertex
 multiplicity: 1           # Number of collision vertices per event (pileup)
 random_seed: 42
 
@@ -25,8 +25,8 @@ particle_gun:
     transverse: true
 
   eta:
-    min: -0.14
-    max: 0.14
+    min: -0.15    #-0.14
+    max: 0.15     #0.14
     uniform: true
 
   phi:
@@ -51,7 +51,7 @@ simulation:
   num_threads: -1
   log_level: "INFO"
   loop_fraction: 1
-  max_steps: 10000
+  max_steps: 100000
   p_min: 0.01  # Minimum momentum threshold in GeV (must be low for 0.1-0.5 GeV particles)
 
 # ============================================================================
@@ -65,5 +65,5 @@ digitization:
 # ============================================================================
 output:
   base_dir: "./data"
-  write_particles_initial: true
+  write_particles_initial: false
   write_geometry: true

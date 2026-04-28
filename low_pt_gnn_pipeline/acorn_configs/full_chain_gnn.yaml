@@ -1,0 +1,150 @@
+# ============================================================================
+# Full GNN Tracking Chain Configuration
+# ============================================================================
+#
+# Two-step workflow (environment conflict: ACTS vs acorn):
+#
+#   Step 1 — ACTS/LCG environment (simulation):
+#     cd /data/alice/bkuipers/acts
+#     source /cvmfs/sft.cern.ch/lcg/views/LCG_108/x86_64-el9-gcc13-opt/setup.sh
+#     source build/python/setup.sh
+#     cd /data/alice/bkuipers/low_pt_gnn_pipeline/full_chain_GNN
+#     python simulate.py [--config ../acorn_configs/full_chain_gnn.yaml]
+#
+#   Step 2 — acorn conda environment (reconstruction + evaluation):
+#     conda activate acorn
+#     cd /data/alice/bkuipers/low_pt_gnn_pipeline/full_chain_GNN
+#     python full_chain_gnn.py [--config ../acorn_configs/full_chain_gnn.yaml]
+#
+# ============================================================================
+
+# Output directory for all intermediate and final data in this run.
+# Relative paths are resolved from low_pt_gnn_pipeline/.
+run_dir: data/full_chain_run
+
+# Dataset split name used for output subdirectories.
+dataset: testset
+
+# If true, keep all intermediate files (feature_store, graph_constructed_latent,
+# gnn_stage, track_building, measurement CSVs, matching DataFrames) for inspection.
+# If false (default), each intermediate directory is deleted as soon as the next
+# stage has consumed it — only the final plots and summary are kept.
+debug_files: false
+
+# ============================================================================
+# PRETRAINED MODEL PATHS
+# Relative paths are resolved from low_pt_gnn_pipeline/.
+# ============================================================================
+models:
+  latent_checkpoint:   saved_models/low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
+  gnn_checkpoint:      saved_models/low_pt_gnn_100_MIXED_loss_val_loss=0.0013.ckpt
+  mini_gnn_checkpoint: data/track_building/mini_GNN_checkpoints/mini_gnn_segment_embedder_val_loss=1.2621.pt
+
+# ============================================================================
+# STAGE 0: SIMULATION
+# ============================================================================
+simulation:
+  num_events: 200
+  particles_per_vertex: 1
+  multiplicity: 1
+  random_seed: 42
+
+  particle_gun:
+    particle_types: [muon, pion, electron, proton]   # multi-species EventGenerator
+    momentum:
+      min: 0.1          # GeV
+      max: 0.5          # GeV
+      transverse: true
+    eta:
+      min: -0.14
+      max:  0.14
+      uniform: true
+    phi:
+      min: 0
+      max: 360
+    randomize_charge: true
+
+  magnetic_field:
+    strength: 2.0       # Tesla
+
+  simulation:
+    enable_interactions: true
+    num_threads: -1
+    log_level: INFO
+    loop_fraction: 1
+    max_steps: 10000
+    p_min: 0.01         # GeV
+
+  digitization:
+    config_file: Examples/Configs/generic-digi-smearing-config.json
+
+  output:
+    base_dir: data/full_chain_run   # overridden at runtime by run_dir
+    write_particles_initial: false
+    write_geometry: true            # required — produces detectors.csv for the CSV reader
+
+# ============================================================================
+# STAGE 2: LATENT GRAPH CONSTRUCTION  (KNN in metric learning embedding)
+# ============================================================================
+graph_construction:
+  k_max: 250            # max neighbours per hit in latent space
+  r_max: 0.4            # max radius in latent space
+  r_max_geometric: 500  # max 3D Euclidean distance [mm] (geometric cut after KNN)
+  device: auto          # "auto" → cuda if available, else cpu
+  num_workers: 4
+  process_batch_size: 4
+
+# ============================================================================
+# STAGE 3: GNN INFERENCE
+# Extra overrides on top of acorn_configs/gnn_stage_(2)/gnn_infer.yaml.
+# Leave empty ({}) to inherit all settings from that file.
+# ============================================================================
+gnn_inference: {}
+
+# ============================================================================
+# STAGE 4: TRACK BUILDING  (GNN segment matching)
+# ============================================================================
+track_building:
+  use_gt_segments: false  # false = CC clusters from GNN scores, true = ground truth
+  score_cut: 0.85         # edge score threshold for Connected Components clustering
+
+  gnn:
+    # model_path is set automatically from models.mini_gnn_checkpoint above
+    cos_sim_threshold: 0.65    # min cosine similarity to consider a segment pair
+    outer_r_threshold: 1000.0  # mm — segments reaching this radius are complete tracks
+    geo_cut_enabled:   true
+    geo_cut_r_high_mm: 150.0   # consider hits above this radius for geometric veto
+    geo_cut_r_tol_mm:   15.0   # co-layer tolerance (|r_A - r_B| ≤ this)
+    geo_cut_min_3d_mm: 100.0   # min 3D separation required at co-located layers
+
+# ============================================================================
+# STAGE 5: EVALUATION
+# ============================================================================
+evaluation:
+  matching_fraction: 0.7   # min shared-hit fraction to call a track reconstructed
+  matching_style: two_way  # ATLAS / one_way / two_way
+  min_track_length: 5      # min hits for a reconstructed track to count
+
+  target_tracks:
+    pt:    [0.1, .inf]
+    nhits: [7,   .inf]     # reconstructable particle requirement
+
+  plots:
+    tracking_efficiency:
+      title: Track Reconstruction Efficiency (Full GNN Chain)
+      font_sizes:
+        axis_label: 18
+        tick_label: 14
+        legend: 14
+        title: 18
+      variables:
+        pt:
+          x_label: "$p_T$ [GeV]"
+          x_lim: [0.1, 0.5]
+          y_lim: [0.0, 1.05]
+          n_bins: 30
+        eta:
+          x_label: "$\\eta$"
+          x_lim: [-0.2, 0.2]
+          y_lim: [0.0, 1.10]
+          n_bins: 30

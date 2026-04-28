@@ -37,13 +37,14 @@ sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.utils.loading_utils import load_datafiles_in_dir
 from low_pt_custom_utils.segment_matching import extract_segments_from_cc
+from low_pt_custom_utils.wrangler_utils import extract_segments_with_wrangler
 from low_pt_custom_utils.mini_gnn_segment_embedding import (
     segment_to_pyg,
     get_segment_particle_id,
 )
 
 
-def process_and_save(event_paths, score_cut, node_scales, output_dir, label=""):
+def process_and_save(event_paths, score_cut, use_wrangler, node_scales, output_dir, label=""):
     """Process events and save precomputed segments to output_dir."""
     output_dir.mkdir(parents=True, exist_ok=True)
     total_segs = 0
@@ -52,7 +53,10 @@ def process_and_save(event_paths, score_cut, node_scales, output_dir, label=""):
     pbar = tqdm(event_paths, desc=f"Precompute {label}", unit="ev")
     for event_path in pbar:
         graph = torch.load(event_path, map_location="cpu", weights_only=False)
-        segments = extract_segments_from_cc(graph, score_cut)
+        if use_wrangler:
+            segments, _ = extract_segments_with_wrangler(graph, score_cut)
+        else:
+            segments = extract_segments_from_cc(graph, score_cut)
 
         seg_data_list = []
         particle_ids = []
@@ -109,16 +113,18 @@ def main():
         output_dir = PIPELINE_ROOT / output_dir
 
     score_cut = config.get("score_cut", 0.85)
+    use_wrangler = config.get("use_wrangler", False)
     node_scales = config.get("node_scales", [1000.0, 1000.0, 500.0, 1000.0])
     data_split = config.get("data_split", [500, 100, 0])
 
     print("=" * 65)
     print("MINI-GNN SEGMENT DATA MINING")
     print("=" * 65)
-    print(f"Config:    {config_file}")
-    print(f"Input:     {input_dir}")
-    print(f"Output:    {output_dir}")
-    print(f"Score cut: {score_cut}")
+    print(f"Config:      {config_file}")
+    print(f"Input:       {input_dir}")
+    print(f"Output:      {output_dir}")
+    print(f"Score cut:   {score_cut}")
+    print(f"Wrangler:    {use_wrangler}")
     print()
 
     t0 = perf_counter()
@@ -129,7 +135,7 @@ def main():
         paths = load_datafiles_in_dir(str(input_dir), split, n_events)
         paths.sort()
         print(f"\n{split}: {len(paths)} events")
-        process_and_save(paths, score_cut, node_scales, output_dir / split, label=split)
+        process_and_save(paths, score_cut, use_wrangler, node_scales, output_dir / split, label=split)
 
     print(f"\nDone in {perf_counter() - t0:.1f}s")
 

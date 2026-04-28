@@ -90,10 +90,19 @@ def create_visualization(graph, r_max=None, k_max=None):
     # Separate true and false edges
     true_edges_mask = (edge_y == 1)
     false_edges_mask = (edge_y == 0)
-    
-    true_edges = edge_index[:, true_edges_mask]
+
+    true_edges_raw = edge_index[:, true_edges_mask]
     false_edges = edge_index[:, false_edges_mask]
-    
+
+    # Deduplicate true edges: (i,j) and (j,i) are the same line in 3D.
+    # edge_y labels both directions true when one_in_one_out=True, so canonicalize.
+    if true_edges_raw.shape[1] > 0:
+        canonical = np.stack([true_edges_raw.min(axis=0), true_edges_raw.max(axis=0)])
+        _, unique_idx = np.unique(canonical.T, axis=0, return_index=True)
+        true_edges = true_edges_raw[:, unique_idx]
+    else:
+        true_edges = true_edges_raw
+
     num_true = true_edges.shape[1]
     num_false = false_edges.shape[1]
     
@@ -213,9 +222,20 @@ def create_visualization(graph, r_max=None, k_max=None):
         ))
     
     # Add nodes with hover text
+    # Extract time attributes if available
+    hit_t = graph.hit_t.numpy() if hasattr(graph, 'hit_t') else None
+    hit_t_smeared = graph.hit_t_smeared.numpy() if hasattr(graph, 'hit_t_smeared') else None
+    hit_has_time = graph.hit_has_time.numpy() if hasattr(graph, 'hit_has_time') else None
+
     hover_text = []
     for i in range(num_nodes):
         additional_fields = {}
+        if hit_t is not None:
+            additional_fields['t'] = float(hit_t[i])
+        if hit_t_smeared is not None:
+            additional_fields['t_smeared'] = float(hit_t_smeared[i])
+        if hit_has_time is not None:
+            additional_fields['has_time'] = int(hit_has_time[i])
         if particle_ids is not None:
             pid = int(particle_ids[i])
             additional_fields['particle_id'] = pid
@@ -401,7 +421,13 @@ Examples:
     print(f"Graph loaded successfully:")
     print(f"  • Nodes: {graph.num_nodes}")
     print(f"  • Edges: {graph.edge_index.shape[1]}")
-    print(f"  • True edges: {graph.edge_y.sum().item()} ({100*graph.edge_y.sum().item()/graph.edge_y.shape[0]:.1f}%)")
+    _te = graph.edge_index[:, graph.edge_y.bool()]
+    if _te.shape[1] > 0:
+        _canon = np.stack([_te.min(dim=0)[0].numpy(), _te.max(dim=0)[0].numpy()])
+        _num_unique_true = np.unique(_canon.T, axis=0).shape[0]
+    else:
+        _num_unique_true = 0
+    print(f"  • True edges: {_num_unique_true} ({100*_num_unique_true/graph.edge_index.shape[1]:.1f}%)")
     
     # Load graph construction parameters from config
     config_path = script_dir.parent / 'acorn_configs' / config_file

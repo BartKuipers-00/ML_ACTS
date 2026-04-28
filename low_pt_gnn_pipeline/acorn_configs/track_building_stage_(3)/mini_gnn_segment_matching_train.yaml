@@ -7,7 +7,7 @@
 # ============================================================================
 
 # Number of events to use from each split: [n_trainset, n_valset, n_testset]
-data_split: [30000, 900, 0]
+data_split: [3000, 200, 0]
 
 # Input directory containing GNN-inferred graphs (used by mini_gnn_data_mining.py)
 input_dir: data/gnn_stage
@@ -33,6 +33,10 @@ gnn:
 # SUPCON LOSS
 
 temperature: 0.1
+
+# Cosine similarity threshold used when computing val matching accuracy
+# (pairs below this are not considered for matching during validation)
+val_cos_sim_threshold: 0.5
 
 # TRAINING HYPERPARAMETERS
 

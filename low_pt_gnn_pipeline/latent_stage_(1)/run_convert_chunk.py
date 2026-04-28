@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run CSV to PyG conversion for a specific event range (no data copying needed!)
+Run CSV to PyG conversion for a specific event range 
 
 Usage:
     python run_convert_chunk.py --chunk 0 --total-chunks 10

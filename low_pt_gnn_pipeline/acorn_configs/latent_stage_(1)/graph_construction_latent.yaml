@@ -1,4 +1,4 @@
-checkpoint: low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
+#checkpoint: low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
 
 # SOTA 20 muons segmented:  low_pt_latentmodel_20_muons_segmented_f1=0.6615.ckpt
 
@@ -6,23 +6,35 @@ checkpoint: low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
 
 # SOTA 20 MIXED: low_pt_latentmodel_20_mixed_f1=0.6250.ckpt
 
-# SOTA 100 MIXED: low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
+# SOTA 100 & 300 MIXED: low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
+
+# SOTA 300 mixed NOT segmented : NOT_SEGMENTED_latentmodel_f1=0.3062.ckpt
+
+checkpoint: low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
+
+################################################ 
+
+one_in_one_out: true  # true = edge_y=1 only for consecutive hit pairs (time-ordered, as in track_edges); false = any same-particle pair
+segmented: true        # true = additionally require same segment (in/out arc transition is never a true edge); false = cross-segment edges allowed
+dr_same_layer_cut: 10.0  # Remove edges between hits on the same detector layer (|Δr| < threshold in mm); null to disable
+
+k_max: 150  # Maximum number of neighbors per hit in latent space (KNN).     #250 
+r_max: 0.14  # Maximum radius for graph construction in latent space.       #0.18
+r_max_geometric: 600  # Maximum 3D Euclidean distance (mm) between connected hits; applied after KNN
 
 
-
-k_max: 250  # Maximum number of neighbors per hit in latent space (KNN)
-r_max: 0.4  # Maximum radius for graph construction in latent space
-r_max_geometric: 500  # Maximum 3D Euclidean distance (mm) between connected hits; applied after KNN
-
-device: "cpu"  # KNN (PyG radius) dominates runtime and is CPU-only; GPU not beneficial
+device: "cpu"  # "cuda" or "cpu"     note cpu is faster for now (I dont have :FRNN insatlled )
 
 input_dir: data/feature_store/  # Input graphs (from ActsReader)
 output_dir: data/graph_constructed_latent/  # Output graphs with learned edges
 
-# Datasets to process
-datasets: [trainset, valset, testset]
+#output_dir: data/graph_constructed_latent_one_in_one_out/
 
-# ============================================================================
-# ADVANCED OPTIONS
-# ============================================================================
-batch_size: 1 # Process one event at a time (graphs have variable sizes)
+# Datasets to process
+# Dict format: process at most N events from each dataset (sorted order)
+
+datasets:
+  trainset: 10000
+  valset: 1000
+  testset: 1000
+
