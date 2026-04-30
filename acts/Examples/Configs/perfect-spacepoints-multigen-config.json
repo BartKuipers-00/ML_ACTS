@@ -5,19 +5,19 @@
     "randomSeed": 42,
     "comment": "MaxSteps: Maximal steps in propagator per particle (otherwise terminate)",
     "maxSteps": 10000,
-    "loopFraction": 4,
+    "loopFraction": 1,
     "eventGenerator": {
       "_comment": "One Generator per entry in particleTypes is created. Each species contributes particlesPerVertex particles per vertex (multiplicity vertices per event). Total particles per event = particlesPerVertex × len(particleTypes) × multiplicity.",
-      "particleTypes": ["electron"],
+      "particleTypes": ["muon", "pionminus", "electron", "proton"],
       "momentum": {
         "_comment": "Units are in GeV. pTransverse=true means pT is sampled uniformly; false means total p.",
-        "min": 0.4,
-        "max": 0.41,
+        "min": 0.1,
+        "max": 0.5,
         "transverse": true
       },
       "eta": {
-        "min": 0.01,
-        "max": 0.02,
+        "min": -0.14,
+        "max": 0.14,
         "uniform": true
       },
       "phi": {
@@ -25,7 +25,7 @@
         "max": 360.0
       },
       "particlesPerVertex": 1,
-      "multiplicity": 200,
+      "multiplicity": 300,
       "randomizeCharge": true
     }
   },
@@ -159,6 +159,7 @@
       "chi2CutOffMeasurement": 15.0,
       "chi2CutOffOutlier": 25.0,
       "numMeasurementsCutOff": 1,
+      "maxSteps": 100000,
       "seedDeduplication": true,
       "stayOnSeed": true
     }

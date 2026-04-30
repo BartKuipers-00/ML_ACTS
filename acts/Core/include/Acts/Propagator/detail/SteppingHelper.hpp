@@ -9,6 +9,7 @@
 #pragma once
 
 #include "Acts/Definitions/Direction.hpp"
+#include "Acts/Definitions/Units.hpp"
 #include "Acts/Propagator/ConstrainedStep.hpp"
 #include "Acts/Surfaces/BoundaryTolerance.hpp"
 #include "Acts/Surfaces/Surface.hpp"
@@ -100,7 +101,9 @@ IntersectionStatus updateSingleSurfaceStatus(
     return IntersectionStatus::onSurface;
   }
 
-  const double nearLimit = std::numeric_limits<double>::lowest();
+  // Reject intersections clearly behind us so the navigator can advance past
+  // surfaces we've physically crossed. Matches StandardAborters' default.
+  const double nearLimit = -100 * UnitConstants::um;
   const double farLimit = std::numeric_limits<double>::max();
 
   bool acceptIntersection = sIntersection.isValid();
