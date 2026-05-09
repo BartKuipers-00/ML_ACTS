@@ -9,8 +9,27 @@
 #include "Acts/Utilities/Intersection.hpp"
 
 #include "Acts/Definitions/Tolerance.hpp"
+#include "Acts/Propagator/StepLimitDiagnostics.hpp"
 
 namespace Acts {
+
+std::atomic<std::size_t>& detail::fatrasFailedCounter() {
+  static std::atomic<std::size_t> counter{0};
+  return counter;
+}
+std::atomic<std::size_t>& detail::fatrasStepLimitCounter() {
+  static std::atomic<std::size_t> counter{0};
+  return counter;
+}
+std::atomic<std::size_t>& detail::trackFindingFailedCounter() {
+  static std::atomic<std::size_t> counter{0};
+  return counter;
+}
+std::atomic<std::size_t>& detail::trackFindingStepLimitCounter() {
+  static std::atomic<std::size_t> counter{0};
+  return counter;
+}
+
 
 bool detail::checkPathLength(double pathLength, double nearLimit,
                              double farLimit, const Logger& logger) {

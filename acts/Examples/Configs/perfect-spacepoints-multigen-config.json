@@ -1,14 +1,14 @@
 {
   "simulation": {
-    "events": 1,
+    "events": 500,
     "numThreads": -1,
     "randomSeed": 42,
     "comment": "MaxSteps: Maximal steps in propagator per particle (otherwise terminate)",
-    "maxSteps": 10000,
+    "maxSteps": 100000,
     "loopFraction": 1,
     "eventGenerator": {
       "_comment": "One Generator per entry in particleTypes is created. Each species contributes particlesPerVertex particles per vertex (multiplicity vertices per event). Total particles per event = particlesPerVertex × len(particleTypes) × multiplicity.",
-      "particleTypes": ["muon", "pionminus", "electron", "proton"],
+      "particleTypes": ["muon", "pionplus", "electron", "proton"],
       "momentum": {
         "_comment": "Units are in GeV. pTransverse=true means pT is sampled uniformly; false means total p.",
         "min": 0.1,
@@ -16,8 +16,8 @@
         "transverse": true
       },
       "eta": {
-        "min": -0.14,
-        "max": 0.14,
+        "min": -0.15,
+        "max": 0.15,
         "uniform": true
       },
       "phi": {
@@ -25,7 +25,7 @@
         "max": 360.0
       },
       "particlesPerVertex": 1,
-      "multiplicity": 300,
+      "multiplicity": 75,
       "randomizeCharge": true
     }
   },
@@ -49,14 +49,15 @@
 
 
   "particleSelection": {
+    "_comment": "Truth-particle filter applied AFTER digitization (addDigiParticleSelection). Particles failing these cuts are removed from particles_selected and therefore do NOT enter the efficiency denominator (and cannot be matched, so also not the numerator).",
     "pt": {
-      "comment": "Minimal pT for a particle to be considered reconstructable (denominator of efficiency).",
+      "comment": "Minimum truth pT [GeV]. Particles below this are dropped from the eff denominator.",
       "min": 0.1,
       "max": null
     },
     "measurements": {
-      "_comment": "Min hits for particle to be considered reconstructable.",
-      "min": 5,
+      "_comment": "Minimum number of digitized measurements per truth particle for it to enter the eff denominator. Counts measurements (post-digi), which equals truth hits when digi efficiency = 1. To allow the CKF leniency for missed hits, keep this >= trackFinding.selectorConfig.nMeasurementsMin (see comment there).",
+      "min": 7,
       "max": null
     },
     "removeNeutral": true
@@ -64,7 +65,7 @@
   
   "seeding": {
     "truthSmearedSeeded": false,
-    "truthEstimatedSeeded": false,
+    "truthEstimatedSeeded": false ,
     "comment": "Set truthEstimatedSeeded=true to use truth-estimated seeding.",
     "smearing": {
       "loc0": 0.0,
@@ -150,9 +151,9 @@
         "min": -4.0,
         "max": 4.0
       },
-      "_comment": "nMeasurementsMin should be >= particleSelection.measurements.min for consistent efficiency.",
-      "nMeasurementsMin": 7,
-      "maxHoles": 2,
+      "_comment": "Minimum number of measurements on the CKF track (post-fit). Tracks below this are dropped BEFORE truth-matching, so the corresponding particle is counted as not reconstructed.",
+      "nMeasurementsMin": 5,
+      "maxHoles": 3,
       "maxOutliers": 2
     },
     "ckfConfig": {
@@ -160,7 +161,7 @@
       "chi2CutOffOutlier": 25.0,
       "numMeasurementsCutOff": 1,
       "maxSteps": 100000,
-      "seedDeduplication": true,
+      "seedDeduplication": true ,
       "stayOnSeed": true
     }
   },

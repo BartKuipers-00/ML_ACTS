@@ -160,17 +160,20 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
       return;
     }
     BoundaryTolerance boundaryTolerance = options.boundaryTolerance;
-    // Old approach: only externalSurfaces had infinite tolerance
-    // if (rangeContainsValue(options.externalSurfaces, sf.geometryId())) {
-    //   boundaryTolerance = BoundaryTolerance::Infinite();
-    // }
     if (rangeContainsValue(options.externalSurfaces, sf.geometryId())) {
       boundaryTolerance = BoundaryTolerance::Infinite();
     }
-    // New approach: use infinite boundary tolerance for sensitive surfaces   (note, we pair thsi with the at() insated of neighbour function function for surface array lookup)
-    if (sensitive) {
-      boundaryTolerance = BoundaryTolerance::Infinite();
-    }
+    // PATCH (currently DISABLED — upstream-clean state):
+    //   force infinite boundary tolerance for sensitive surfaces.
+    //   Paired with the at()-based surface-array lookup below: at() returns
+    //   only one phi-bin's primary sensor, so the candidate's plane must be
+    //   treated as unbounded to catch trajectories that physically cross the
+    //   module's silicon outside the bin's nominal extent. Re-enable this
+    //   block AND the at()/lookupPosition block below to apply the patch;
+    //   leave both commented out (and neighbors() active) for upstream-clean.
+    // if (sensitive) {
+    //   boundaryTolerance = BoundaryTolerance::Infinite();
+    // }
     // the surface intersection
     SurfaceIntersection sfi =
         sf.intersect(gctx, position, direction, boundaryTolerance).closest();
@@ -214,27 +217,54 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
   // check the sensitive surfaces if you have some
   if (m_surfaceArray && (options.resolveMaterial || options.resolvePassive ||
                          options.resolveSensitive)) {
+    // ── PATCH: at()-based lookup (currently DISABLED — upstream-clean state)
+    // Project the trajectory onto the layer's representing surface and use
+    // that landing point for the surface-array bin lookup. at() returns
+    // only the surfaces in the single bin, so it MUST be paired with
+    // BoundaryTolerance::Infinite() above (the bin's primary sensor's
+    // plane is treated as unbounded so out-of-bin crossings still register).
+    // To re-enable: uncomment this block AND the "if (sensitive) Infinite()"
+    // block in processSurface, AND comment out the neighbors() line below.
+    // Vector3 lookupPosition = position;
+    // if (SurfaceIntersection intersection =
+    //         surfaceRepresentation()
+    //             .intersect(gctx, position, direction)
+    //             .closest();
+    //     intersection.isValid()) {
+    //   lookupPosition = intersection.position();
+    // }
+    // // get the candidates: at() returns only surfaces in the exact bin
+    // // containing lookupPosition (~1 candidate per layer crossing).
+    // const std::vector<const Surface*>& sensitiveSurfaces =
+    //     m_surfaceArray->at(lookupPosition);
+    // ── /PATCH ───────────────────────────────────────────────────────────
+    //
+    // Upstream-clean: neighbors() returns the bin and its surrounding
+    // neighbors (3x3 grid), so trajectories crossing module seams or stave
+    // overlaps are still found via finite-bounds intersect() rejection.
+    //
+    // ── PATCH: lookupPosition projection ────────────────────────────────
+    // The default neighbors(position) uses bare current position for the
+    // bin-lookup. That is mathematically equivalent to a RADIAL projection
+    // of the current point onto the representing surface — fine for the
+    // immediate next layer (propagator is right next to it), but wrong for
+    // inner-layer return-arc crossings where the trajectory is far from
+    // the layer in r and has azimuthal drift before arriving. We instead
+    // ray-cast the trajectory's line onto the layer's representing surface
+    // and use that crossing point for the bin lookup. To revert, comment
+    // this PATCH block out (lookupPosition stays unused) and pass `position`
+    // back to neighbors() below.
     Vector3 lookupPosition = position;
-
-    // if possible use a position on the representative surface for the surface
-    // array lookup
-    if (SurfaceIntersection intersection =
+    if (SurfaceIntersection sIntersection =
             surfaceRepresentation()
                 .intersect(gctx, position, direction)
                 .closest();
-        intersection.isValid()) {
-      lookupPosition = intersection.position();
+        sIntersection.isValid()) {
+      lookupPosition = sIntersection.position();
     }
-
-    // get the candidates
-    // Old approach: neighbors() returns surfaces from bin + 8 surrounding neighbors (3x3 grid)
-    // const std::vector<const Surface*>& sensitiveSurfaces =
-    //     m_surfaceArray->neighbors(lookupPosition);
-    
-    // New approach: at() returns only surfaces in the exact bin containing lookupPosition
+    // ── /PATCH ──────────────────────────────────────────────────────────
     const std::vector<const Surface*>& sensitiveSurfaces =
-        m_surfaceArray->at(lookupPosition);
-    
+        m_surfaceArray->neighbors(lookupPosition);
     // loop through and veto
     // - if the approach surface is the parameter surface
     // - if the surface is not compatible with the type(s) that are collected

@@ -23,6 +23,8 @@
 #include "Acts/Propagator/Navigator.hpp"
 #include "Acts/Propagator/Propagator.hpp"
 #include "Acts/Propagator/StandardAborters.hpp"
+#include "Acts/Propagator/PropagatorError.hpp"
+#include "Acts/Propagator/StepLimitDiagnostics.hpp"
 #include "Acts/Propagator/SympyStepper.hpp"
 #include "Acts/Surfaces/PerigeeSurface.hpp"
 #include "Acts/Surfaces/Surface.hpp"
@@ -494,6 +496,12 @@ ProcessCode TrackFindingAlgorithm::execute(const AlgorithmContext& ctx) const {
 
     if (!firstResult.ok()) {
       m_nFailedSeeds++;
+      Acts::detail::trackFindingFailedCounter().fetch_add(
+          1, std::memory_order_relaxed);
+      if (firstResult.error() == Acts::PropagatorError::StepCountLimitReached) {
+        Acts::detail::trackFindingStepLimitCounter().fetch_add(
+            1, std::memory_order_relaxed);
+      }
       ACTS_WARNING("Track finding failed for seed " << iSeed << " with error"
                                                     << firstResult.error());
       continue;

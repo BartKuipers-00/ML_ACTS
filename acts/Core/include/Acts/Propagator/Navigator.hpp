@@ -710,10 +710,17 @@ class Navigator {
           navOpts.externalSurfaces.push_back(itSurface->second);
         }
       }
-      // Pass the real direction (not effectiveDirection) to compatibleSurfaces
-      // This ensures lookupPosition and intersection calculations use the real trajectory direction
+      // Use bisector(tangent, radial-inward) on the return arc so the
+      // surface-array bin lookup (Layer::compatibleSurfaces ray-casts the
+      // trajectory line onto the representing surface to pick the phi-bin)
+      // and the per-surface intersect inside processSurface land on the
+      // sensitive module the trajectory is actually heading toward, not
+      // the one the near-tangential raw direction would project to.
+      Vector3 surfaceLookupDirection =
+          computeEffectiveDirection(state, position, direction,
+                                    /*useBisector=*/true);
       state.navSurfaces = currentLayer->compatibleSurfaces(
-          state.options.geoContext, position, direction, navOpts);
+          state.options.geoContext, position, surfaceLookupDirection, navOpts);
       // Sort the surfaces by path length.
       // Special care is taken for the external surfaces which should always
       // come first, so they are preferred to be targeted and hit first.
@@ -1053,39 +1060,67 @@ class Navigator {
 
   /// @brief Compute effective direction for navigation at turning points
   ///
-  /// When particles turn inward in barrel regions, use pure radial direction
-  /// instead of momentum direction for geometry intersection calculations.
+  /// When particles turn inward in barrel regions, the raw momentum direction
+  /// is near-tangential at the apex and the line-plane intersect mis-targets
+  /// inner layers and modules. Two substitutions are needed:
+  ///
+  ///  - Pure radial (`useBisector = false`): for compatibleLayers /
+  ///    compatibleBoundaries volume-wide candidate searches. A bisector
+  ///    here is mostly tangential at the turning point and drops inner
+  ///    layers from the candidate list.
+  ///  - Bisector (`useBisector = true`): for compatibleSurfaces on the
+  ///    current layer (bin lookup + per-surface intersect). The bisector
+  ///    keeps a well-conditioned radial component for the line-plane
+  ///    denominator while preserving forward motion, so the bin lookup
+  ///    lands on the right phi-bin.
   ///
   /// @param state The navigation state
   /// @param position Current position
   /// @param direction Original propagation direction
+  /// @param useBisector If true, return bisector(direction, -r̂); else -r̂.
   /// @return Effective direction for intersection calculations
   Vector3 computeEffectiveDirection(State& state, const Vector3& position,
-                                    const Vector3& direction) const {
+                                    const Vector3& direction,
+                                    bool useBisector = false) const {
     Vector3 effectiveDirection = direction;
-    
-    if (state.radiallyInward) {
-      state.isInBarrelVolume = isBarrelVolume(state.currentVolume);
-      
-      if (state.isInBarrelVolume) {
-        double r_xy = std::sqrt(position[0] * position[0] + position[1] * position[1]);
-        if (r_xy > 1e-6) {
-          // Radial unit vector: r_hat = (x, y) / r_xy
-          double r_hat_x = position[0] / r_xy;
-          double r_hat_y = position[1] / r_xy;
-          
-          // Set to pure radial inward direction (unit vector, no z component)
-          effectiveDirection[0] = -r_hat_x;  // Inward (negative radial)
-          effectiveDirection[1] = -r_hat_y;
-          effectiveDirection[2] = 0.0;
-          
-          ACTS_VERBOSE("Using pure radial inward direction in barrel");
-        }
-      } else {
-        ACTS_VERBOSE(volInfo(state) << "Endcap volume - keeping original direction with z-component");
-      }
+
+    if (!state.radiallyInward) {
+      return effectiveDirection;
     }
-    
+
+    state.isInBarrelVolume = isBarrelVolume(state.currentVolume);
+    if (!state.isInBarrelVolume) {
+      ACTS_VERBOSE(volInfo(state) << "Endcap volume - keeping original direction with z-component");
+      return effectiveDirection;
+    }
+
+    double r_xy = std::sqrt(position[0] * position[0] + position[1] * position[1]);
+    if (r_xy <= 1e-6) {
+      return effectiveDirection;
+    }
+
+    double r_hat_x = position[0] / r_xy;
+    double r_hat_y = position[1] / r_xy;
+
+    if (useBisector) {
+      double sum_x = direction[0] - r_hat_x;
+      double sum_y = direction[1] - r_hat_y;
+      double sum_z = direction[2];
+      double sum_mag = std::sqrt(sum_x * sum_x + sum_y * sum_y + sum_z * sum_z);
+      if (sum_mag > 1e-9) {
+        effectiveDirection[0] = sum_x / sum_mag;
+        effectiveDirection[1] = sum_y / sum_mag;
+        effectiveDirection[2] = sum_z / sum_mag;
+        ACTS_VERBOSE("Using bisector(tangent, radial-inward) effective direction in barrel");
+        return effectiveDirection;
+      }
+      ACTS_VERBOSE("Bisector degenerate — falling back to pure radial inward");
+    }
+
+    effectiveDirection[0] = -r_hat_x;
+    effectiveDirection[1] = -r_hat_y;
+    effectiveDirection[2] = 0.0;
+    ACTS_VERBOSE("Using pure radial inward direction in barrel");
     return effectiveDirection;
   }
 

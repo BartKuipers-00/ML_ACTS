@@ -333,9 +333,50 @@ def runPerfectSpacepointsMultiGen(
         initialSigmaPtRel=seed["initialSigmaPtRel"],
         initialVarInflation=seed["initialVarInflation"],
         geoSelectionConfigFile=geometrySelection,
-        outputDirRoot=outputDir,
+        # Skip the framework auto-writer; we add our own writers below with
+        # fine pT binning suitable for low-pT seeding-efficiency analysis.
+        outputDirRoot=None,
         rnd=rnd,
     )
+
+    # -------------------------------------------------------------------------
+    # Seeding performance output (fine pT binning, low-pT analysis)
+    # -------------------------------------------------------------------------
+    if not seed["truthSmearedSeeded"]:
+        _seedingEffBinning = {
+            "Pt":     acts.examples.Binning("pT [GeV/c]", 40, 0.0, 0.5),
+            "Eta":    acts.examples.Binning("#eta", 40, -4, 4),
+            "Phi":    acts.examples.Binning("#phi", 100, -3.15, 3.15),
+            "Z0":     acts.examples.Binning("z_0 [mm]", 50, -200, 200),
+            "DeltaR": acts.examples.Binning("#Delta R", 100, 0, 0.3),
+            "prodR":  acts.examples.Binning("prod_R [mm]", 100, 0, 200),
+        }
+        s.addWriter(
+            acts.examples.TrackFinderPerformanceWriter(
+                level=getattr(acts.logging, logging_cfg["level"]),
+                inputTracks="seed-tracks",
+                inputParticles="particles_selected",
+                inputTrackParticleMatching="seed_particle_matching",
+                inputParticleTrackMatching="particle_seed_matching",
+                inputParticleMeasurementsMap="particle_measurements_map",
+                filePath=str(outputDir / "performance_seeding.root"),
+                effPlotToolConfig=acts.examples.EffPlotToolConfig(_seedingEffBinning),
+                writeMatchingDetails=True,
+            )
+        )
+        s.addWriter(
+            acts.examples.RootTrackParameterWriter(
+                level=getattr(acts.logging, logging_cfg["level"]),
+                inputTrackParameters="estimatedparameters",
+                inputProtoTracks="seed-prototracks",
+                inputParticles="particles",
+                inputSimHits="simhits",
+                inputMeasurementParticlesMap="measurement_particles_map",
+                inputMeasurementSimHitsMap="measurement_simhits_map",
+                filePath=str(outputDir / "estimatedparams.root"),
+                treeName="estimatedparams",
+            )
+        )
 
     # -------------------------------------------------------------------------
     # Track finding (CKF)
@@ -536,4 +577,20 @@ if "__main__" == __name__:
         inputParticlePath=None,
         loop_fraction=sim_config.get("loopFraction", None),
     )
-    sequencer.run()
+    # Snapshot the per-stage step-limit drop counters: how many particles
+    # (Fatras) / seed tracks (CKF) were terminated because the propagator
+    # hit PropagatorError::StepCountLimitReached. try/finally so the
+    # diagnostic still prints if the Sequencer aborts (e.g. unmasked FPEs).
+    acts.resetStepLimitCounts()
+    n_events_run = sim_config.get("events", "?")
+    try:
+        sequencer.run()
+    finally:
+        sim_failed   = acts.fatrasFailedCount()
+        sim_steplim  = acts.fatrasStepLimitCount()
+        reco_failed  = acts.trackFindingFailedCount()
+        reco_steplim = acts.trackFindingStepLimitCount()
+        print(f"[failures diagnostic] events={n_events_run}  "
+              f"fatras_failed={sim_failed} (of which step_limit={sim_steplim})  "
+              f"ckf_failed={reco_failed} (of which step_limit={reco_steplim})  "
+              f"total={sim_failed + reco_failed}")

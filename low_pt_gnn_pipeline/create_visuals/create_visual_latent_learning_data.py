@@ -107,7 +107,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
     if color_by == 'particle' and hit_particle_id is not None:
         # Color by particle ID
         unique_particles = np.unique(hit_particle_id[hit_particle_id > 0])
-        colors = px.colors.qualitative.Set3
+        colors = [c for c in px.colors.qualitative.Set3 if c.lower() not in ('#ffffb3', '#ffed6f')]
         for i, pid in enumerate(unique_particles):
             mask = hit_particle_id == pid
             color = colors[i % len(colors)]
@@ -122,7 +122,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
                 mode='markers',
                 name=particle_label,
                 marker=dict(
-                    size=3,
+                    size=2,
                     color=color,
                     opacity=0.7,
                 ),
@@ -144,7 +144,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
                 mode='markers',
                 name='Noise',
                 marker=dict(
-                    size=2,
+                    size=1.5,
                     color='gray',
                     opacity=0.5,
                 ),
@@ -159,7 +159,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
     elif color_by == 'region' and hit_region is not None:
         # Color by region
         unique_regions = np.unique(hit_region)
-        colors = px.colors.qualitative.Set3
+        colors = [c for c in px.colors.qualitative.Set3 if c.lower() not in ('#ffffb3', '#ffed6f')]
         for i, region in enumerate(unique_regions):
             mask = hit_region == region
             color = colors[i % len(colors)]
@@ -170,7 +170,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
                 mode='markers',
                 name=f'Region {int(region)}',
                 marker=dict(
-                    size=3,
+                    size=2,
                     color=color,
                     opacity=0.7,
                 ),
@@ -191,7 +191,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
             mode='markers',
             name='Hits',
             marker=dict(
-                size=3,
+                size=2,
                 color='blue',
                 opacity=0.7,
             ),
@@ -242,7 +242,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
         # Group edges by particle for coloring
         if hit_particle_id is not None and len(edge_info) > 0:
             unique_particles = np.unique([pid for pid in hit_particle_id[track_edges[0]] if pid > 0])
-            colors = px.colors.qualitative.Set3
+            colors = [c for c in px.colors.qualitative.Set3 if c.lower() not in ('#ffffb3', '#ffed6f')]
             
             for i, pid in enumerate(unique_particles):
                 pid_mask = hit_particle_id[track_edges[0]] == pid
@@ -272,7 +272,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
                         name=f'Edges ({particle_label})',
                         line=dict(
                             color=colors[i % len(colors)],
-                            width=2,
+                            width=4,
                         ),
                         showlegend=True,
                         hoverinfo='skip',
@@ -287,7 +287,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
                 name='Truth Edges',
                 line=dict(
                     color='red',
-                    width=1,
+                    width=3,
                 ),
                 showlegend=True,
                 hoverinfo='skip',

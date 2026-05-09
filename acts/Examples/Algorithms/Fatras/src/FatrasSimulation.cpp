@@ -13,6 +13,8 @@
 #include "Acts/Propagator/Navigator.hpp"
 #include "Acts/Propagator/Propagator.hpp"
 #include "Acts/Propagator/StraightLineStepper.hpp"
+#include "Acts/Propagator/PropagatorError.hpp"
+#include "Acts/Propagator/StepLimitDiagnostics.hpp"
 #include "Acts/Propagator/SympyStepper.hpp"
 #include "Acts/Surfaces/Surface.hpp"
 #include "Acts/Utilities/Logger.hpp"
@@ -265,6 +267,12 @@ ActsExamples::ProcessCode ActsExamples::FatrasSimulation::execute(
     ACTS_ERROR("event " << ctx.eventNumber << " particle " << failed.particle
                         << " failed to simulate with error " << failed.error
                         << ": " << failed.error.message());
+    Acts::detail::fatrasFailedCounter().fetch_add(
+        1, std::memory_order_relaxed);
+    if (failed.error == Acts::PropagatorError::StepCountLimitReached) {
+      Acts::detail::fatrasStepLimitCounter().fetch_add(
+          1, std::memory_order_relaxed);
+    }
   }
 
   ACTS_DEBUG(particlesInitialUnordered.size()

@@ -9,7 +9,6 @@
 #pragma once
 
 #include "Acts/Definitions/Direction.hpp"
-#include "Acts/Definitions/Units.hpp"
 #include "Acts/Propagator/ConstrainedStep.hpp"
 #include "Acts/Surfaces/BoundaryTolerance.hpp"
 #include "Acts/Surfaces/Surface.hpp"
@@ -51,41 +50,76 @@ IntersectionStatus updateSingleSurfaceStatus(
   // Check for radial momentum flip (turning point detection for spiraling particles)
   Vector3 position = stepper.position(state);
   Vector3 dir = stepper.direction(state);
-  
+
   // projection on radial direction p_r = p(cartesian) dot r_hat = (p_x * x + p_y * y) / sqrt(x^2 + y^2)
-  double r_xy = std::sqrt(position[0] * position[0] + position[1] * position[1]); 
+  double r_xy = std::sqrt(position[0] * position[0] + position[1] * position[1]);
   bool radiallyInward_current = false;
   if (r_xy > 1e-6) {  // Avoid division by zero
-    double pr = (position[0] *dir[0] +position[1]*dir[1]) / r_xy;
+    double pr = (position[0] * dir[0] + position[1] * dir[1]) / r_xy;
     radiallyInward_current = (pr <= 0.0);  // Inward or tangential (use radial direction)
   }
 
   // Detect change in radial direction (turning point)
   if (radiallyInward_current != state.radiallyInward_previous) {
-    ACTS_VERBOSE("Turning point detected: radiallyInward changed from " << state.radiallyInward_previous << " to " << radiallyInward_current);
+    ACTS_VERBOSE("Turning point detected: radiallyInward changed from "
+                 << state.radiallyInward_previous << " to "
+                 << radiallyInward_current);
     state.radiallyInward_previous = radiallyInward_current;
     state.turningPointDetected = true;  // Set flag for propagator & navigator
     return IntersectionStatus::unreachable;
   }
-  
+
   // Update for next step
   state.radiallyInward_previous = radiallyInward_current;
 
-  // Determine which direction to use for intersection calculation     
+  // Determine which direction to use for intersection calculation
   Vector3 intersectionDirection = direction * stepper.direction(state);
-  
-  // When going radially inward in barrel regions, use pure radial direction for intersection
+
+  // When going radially inward in barrel regions, substitute the
+  // intersection direction. The substitution depends on the target surface:
+  //   - sensitive sensor surfaces: bisector(direction, -r̂). Keeps a
+  //     well-conditioned radial component for the line-plane denominator
+  //     while preserving forward motion, so the per-step intersect lands
+  //     on the actual module the trajectory is heading toward (raw tangent
+  //     mis-targets across phi-bins on the return arc).
+  //   - approach / boundary / layer-rep surfaces: pure -r̂. These planes
+  //     are radially well-conditioned (≈⊥ r̂ in the barrel) so pure radial
+  //     gives the cleanest intersect; the bisector here can mis-pick
+  //     across layers near the apex where tangent ⊥ radial-inward.
   if (state.radiallyInward_previous && isInBarrelVolume && r_xy > 1e-6) {
-    // Radial unit vector: r_hat = (x, y) / r_xy
-    double r_hat_x = position[0] / r_xy;
-    double r_hat_y = position[1] / r_xy;
-    
-    // Set to pure radial inward direction (unit vector, no z component)
-    intersectionDirection[0] = -r_hat_x;
-    intersectionDirection[1] = -r_hat_y;
-    intersectionDirection[2] = 0.0;
-    
-    ACTS_VERBOSE("Using pure radial inward direction for intersection calculation in barrel");
+    const double r_hat_x = position[0] / r_xy;
+    const double r_hat_y = position[1] / r_xy;
+    const bool isSensitive = surface.geometryId().sensitive() != 0;
+
+    if (isSensitive) {
+      const double sum_x = intersectionDirection[0] - r_hat_x;
+      const double sum_y = intersectionDirection[1] - r_hat_y;
+      const double sum_z = intersectionDirection[2];
+      const double sum_mag =
+          std::sqrt(sum_x * sum_x + sum_y * sum_y + sum_z * sum_z);
+      if (sum_mag > 1e-9) {
+        intersectionDirection[0] = sum_x / sum_mag;
+        intersectionDirection[1] = sum_y / sum_mag;
+        intersectionDirection[2] = sum_z / sum_mag;
+        ACTS_VERBOSE(
+            "Sensitive surface: using bisector(tangent, radial-inward) for "
+            "intersect in barrel");
+      } else {
+        intersectionDirection[0] = -r_hat_x;
+        intersectionDirection[1] = -r_hat_y;
+        intersectionDirection[2] = 0.0;
+        ACTS_VERBOSE(
+            "Sensitive surface: bisector degenerate — falling back to radial "
+            "inward");
+      }
+    } else {
+      intersectionDirection[0] = -r_hat_x;
+      intersectionDirection[1] = -r_hat_y;
+      intersectionDirection[2] = 0.0;
+      ACTS_VERBOSE(
+          "Approach/boundary surface: using pure radial inward for intersect "
+          "in barrel");
+    }
   }
 
   auto sIntersection =
@@ -101,14 +135,10 @@ IntersectionStatus updateSingleSurfaceStatus(
     return IntersectionStatus::onSurface;
   }
 
-  // Reject intersections clearly behind us so the navigator can advance past
-  // surfaces we've physically crossed. Matches StandardAborters' default.
-  const double nearLimit = -100 * UnitConstants::um;
+  const double nearLimit = std::numeric_limits<double>::lowest();
   const double farLimit = std::numeric_limits<double>::max();
 
-  bool acceptIntersection = sIntersection.isValid();
-
-  if (acceptIntersection &&
+  if (sIntersection.isValid() &&
       detail::checkPathLength(sIntersection.pathLength(), nearLimit, farLimit,
                               logger)) {
     ACTS_VERBOSE("Surface is reachable");

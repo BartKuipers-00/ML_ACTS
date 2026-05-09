@@ -8,6 +8,7 @@
 
 #include "Acts/ActsVersion.hpp"
 #include "Acts/Plugins/Python/Utilities.hpp"
+#include "Acts/Propagator/StepLimitDiagnostics.hpp"
 
 #include <tuple>
 #include <unordered_map>
@@ -102,6 +103,16 @@ PYBIND11_MODULE(ActsPythonBindings, m) {
     mv.attr("commit_hash") = Acts::CommitHash;
     mv.attr("commit_hash_short") = Acts::CommitHashShort;
   }
+
+  // Diagnostic counters split by stage (Fatras vs CKF) and by failure type:
+  //   *Failed     — increments on ANY non-ok propagator result
+  //   *StepLimit  — subset: only PropagatorError::StepCountLimitReached
+  m.def("fatrasFailedCount", &Acts::detail::fatrasFailedCount);
+  m.def("fatrasStepLimitCount", &Acts::detail::fatrasStepLimitCount);
+  m.def("trackFindingFailedCount", &Acts::detail::trackFindingFailedCount);
+  m.def("trackFindingStepLimitCount",
+        &Acts::detail::trackFindingStepLimitCount);
+  m.def("resetStepLimitCounts", &Acts::detail::resetStepLimitCounts);
 
   addContext(ctx);
   addAny(ctx);

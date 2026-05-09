@@ -8,6 +8,7 @@
 
 #include "ActsExamples/TruthTracking/TruthSeedingAlgorithm.hpp"
 
+#include "Acts/Definitions/Common.hpp"
 #include "Acts/EventData/SourceLink.hpp"
 #include "ActsExamples/EventData/IndexSourceLink.hpp"
 #include "ActsExamples/EventData/SimParticle.hpp"
@@ -168,70 +169,109 @@ ProcessCode TruthSeedingAlgorithm::execute(const AlgorithmContext& ctx) const {
       ACTS_WARNING("Particle " << particle << " has less than 3 measurements");
       continue;
     }
-    // Space points on the proto track
-    std::vector<const SimSpacePoint*> spacePointsOnTrack;
-    spacePointsOnTrack.reserve(track.size());
-    // Loop over the measurement index on the proto track to find the space
-    // points
-    for (const auto& measurementIndex : track) {
-      auto it = spMap.find(measurementIndex);
-      if (it != spMap.end()) {
-        spacePointsOnTrack.push_back(it->second);
+
+    // Walk the hit-time-ordered measurement list, look up each SP, and
+    // classify the SP by the sign of the truth radial momentum at that hit:
+    //   p_r = (p_x * x + p_y * y) / r
+    //   p_r > 0  -> outgoing arm (particle moving radially outward)
+    //   p_r < 0  -> incoming arm (particle moving radially inward)
+    //
+    // This is a direct, per-hit physical label using SimHit::momentum4Before
+    // and avoids the r-monotonicity edge cases (apex, pericenter, equal-r
+    // SPs across arms).
+    //
+    // Low-pT loopers leave SPs on multiple arms (outgoing -> turnaround ->
+    // incoming -> outgoing again -> ...). Each maximal run of same-sign p_r
+    // is one "arm" and produces its own seed below, so a single looper can
+    // contribute multiple seeds (one per arm) instead of being thrown out.
+    std::vector<std::vector<const SimSpacePoint*>> arms;
+    int armDir = 0;  // +1 outgoing, -1 incoming
+    for (const auto& [simHit, measurementIndex] : hits) {
+      auto spIt = spMap.find(measurementIndex);
+      if (spIt == spMap.end()) {
+        continue;
       }
+      const SimSpacePoint* sp = spIt->second;
+
+      const auto& pos4 = simHit->fourPosition();
+      const auto& mom4 = simHit->momentum4Before();
+      const double x = pos4[Acts::ePos0];
+      const double y = pos4[Acts::ePos1];
+      const double r = std::hypot(x, y);
+      if (r == 0) {
+        continue;
+      }
+      const double pr =
+          (mom4[Acts::eMom0] * x + mom4[Acts::eMom1] * y) / r;
+      if (pr == 0) {
+        // exactly tangential motion at this hit -- ambiguous, skip
+        continue;
+      }
+      const int dir = (pr > 0) ? +1 : -1;
+
+      if (armDir == 0 || dir != armDir) {
+        // first SP, or direction flipped -> start a new arm
+        arms.emplace_back();
+        armDir = dir;
+      }
+      arms.back().push_back(sp);
     }
-    // At least three space points are required
-    if (spacePointsOnTrack.size() < 3) {
-      continue;
-    }
 
-    // Sort the space points time
-    std::ranges::sort(spacePointsOnTrack, [&](const auto* a, const auto* b) {
-      auto ta = a->t();
-      auto tb = b->t();
-      if (!ta.has_value()) {
-        return false;
-      }
-      if (!tb.has_value()) {
-        return true;
+    bool anySeedFound = false;
+    for (auto& arm : arms) {
+      if (arm.size() < 3) {
+        continue;
       }
 
-      return *ta < *tb;
-    });
+      // Re-order each arm by r ascending so bottom = innermost SP and
+      // top = outermost SP, regardless of whether the arm was outgoing
+      // (time-order already r-ascending) or incoming (time-order
+      // r-descending). Both seeds therefore present an outward-going
+      // (bottom -> middle -> top) helix to TrackParamsEstimationAlgorithm,
+      // matching ACTS' standard seed convention.
+      std::ranges::sort(arm, [](const auto* a, const auto* b) {
+        return a->r() < b->r();
+      });
 
-    // Loop over the found space points to find the seed with maximum deltaR
-    // between the bottom and top space point
-    // @todo add the check of deltaZ
-    bool seedFound = false;
-    std::array<std::size_t, 3> bestSPIndices{};
-    double maxDeltaR = std::numeric_limits<double>::min();
-    for (std::size_t ib = 0; ib < spacePointsOnTrack.size() - 2; ++ib) {
-      for (std::size_t im = ib + 1; im < spacePointsOnTrack.size() - 1; ++im) {
-        for (std::size_t it = im + 1; it < spacePointsOnTrack.size(); ++it) {
-          double bmDeltaR = std::abs(spacePointsOnTrack[im]->r() -
-                                     spacePointsOnTrack[ib]->r());
-          double mtDeltaR = std::abs(spacePointsOnTrack[it]->r() -
-                                     spacePointsOnTrack[im]->r());
-          if (bmDeltaR >= m_cfg.deltaRMin && bmDeltaR <= m_cfg.deltaRMax &&
-              mtDeltaR >= m_cfg.deltaRMin && mtDeltaR <= m_cfg.deltaRMax &&
-              (bmDeltaR + mtDeltaR) > maxDeltaR) {
-            maxDeltaR = bmDeltaR + mtDeltaR;
-            bestSPIndices = {ib, im, it};
-            seedFound = true;
+      // Loop over the SPs on this arm to find the triplet with maximum
+      // deltaR between the bottom-middle and middle-top pairs.
+      // @todo add the check of deltaZ
+      bool seedFound = false;
+      std::array<std::size_t, 3> bestSPIndices{};
+      double maxDeltaR = std::numeric_limits<double>::min();
+      for (std::size_t ib = 0; ib < arm.size() - 2; ++ib) {
+        for (std::size_t im = ib + 1; im < arm.size() - 1; ++im) {
+          for (std::size_t it = im + 1; it < arm.size(); ++it) {
+            double bmDeltaR = arm[im]->r() - arm[ib]->r();
+            double mtDeltaR = arm[it]->r() - arm[im]->r();
+            if (bmDeltaR >= m_cfg.deltaRMin && bmDeltaR <= m_cfg.deltaRMax &&
+                mtDeltaR >= m_cfg.deltaRMin && mtDeltaR <= m_cfg.deltaRMax &&
+                (bmDeltaR + mtDeltaR) > maxDeltaR) {
+              maxDeltaR = bmDeltaR + mtDeltaR;
+              bestSPIndices = {ib, im, it};
+              seedFound = true;
+            }
           }
         }
       }
+
+      if (seedFound) {
+        SimSeed seed{*arm[bestSPIndices[0]], *arm[bestSPIndices[1]],
+                     *arm[bestSPIndices[2]]};
+        seed.setVertexZ(static_cast<float>(arm[bestSPIndices[1]]->z()));
+
+        seeds.emplace_back(seed);
+        // Mirror the original 1:1 seed/proto-track output by emitting a
+        // copy of the particle's full hit list per seed. Downstream
+        // (SeedsToPrototracks) only consumes seeds, so this is mostly a
+        // bookkeeping copy.
+        tracks.emplace_back(track);
+        anySeedFound = true;
+      }
     }
 
-    if (seedFound) {
-      SimSeed seed{*spacePointsOnTrack[bestSPIndices[0]],
-                   *spacePointsOnTrack[bestSPIndices[1]],
-                   *spacePointsOnTrack[bestSPIndices[2]]};
-      seed.setVertexZ(
-          static_cast<float>(spacePointsOnTrack[bestSPIndices[1]]->z()));
-
+    if (anySeedFound) {
       seededParticles.insert(particle);
-      seeds.emplace_back(seed);
-      tracks.emplace_back(std::move(track));
     }
   }
 
