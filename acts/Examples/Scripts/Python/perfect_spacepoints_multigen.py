@@ -176,6 +176,9 @@ def runPerfectSpacepointsMultiGen(
     if pMin is not None:
         pMin = pMin * u.GeV
 
+    nav_cfg = config.get("navigation", {})
+    max_surface_retargets = int(nav_cfg.get("max_surface_retargets", 3))
+
     addFatras(
         s,
         trackingGeometry,
@@ -186,6 +189,7 @@ def runPerfectSpacepointsMultiGen(
         maxSteps=sim.get("maxSteps", None),
         loopFraction=sim.get("loopFraction", None),
         debugStepInterval=logging_cfg.get("n", None),
+        maxSurfaceRetargets=max_surface_retargets,
         outputDirRoot=outputDir,
     )
 
@@ -459,7 +463,10 @@ def runPerfectSpacepointsMultiGen(
 
         outputTracks="ckf_tracks",
         findTracks=acts.examples.TrackFindingAlgorithm.makeTrackFinderFunction(
-            trackingGeometry, field, customLogLevel()
+            trackingGeometry,
+            field,
+            customLogLevel(),
+            maxSurfaceRetargets=max_surface_retargets,
         ),
         **acts.examples.defaultKWArgs(
             trackingGeometry=trackingGeometry,
@@ -582,6 +589,7 @@ if "__main__" == __name__:
     # hit PropagatorError::StepCountLimitReached. try/finally so the
     # diagnostic still prints if the Sequencer aborts (e.g. unmasked FPEs).
     acts.resetStepLimitCounts()
+    acts.resetApexInsideShellCounts()
     n_events_run = sim_config.get("events", "?")
     try:
         sequencer.run()
@@ -594,3 +602,39 @@ if "__main__" == __name__:
               f"fatras_failed={sim_failed} (of which step_limit={sim_steplim})  "
               f"ckf_failed={reco_failed} (of which step_limit={reco_steplim})  "
               f"total={sim_failed + reco_failed}")
+        # Navigator-internal sensitive-surface retarget counters.
+        # invoked   = how many times Layer::compatibleSurfaces was re-run after
+        #             a sensitive module returned unreachable mid-step.
+        # succeeded = subset where the propagator subsequently reached at least
+        #             one sensitive module on the same layer entry (counted
+        #             at most once per layer per track).
+        fatras_rt_inv = acts.fatrasRetargetInvokedCount()
+        fatras_rt_ok  = acts.fatrasRetargetSucceededCount()
+        ckf_rt_inv    = acts.ckfRetargetInvokedCount()
+        ckf_rt_ok     = acts.ckfRetargetSucceededCount()
+        def _pct(n, d):
+            return 0.0 if d == 0 else 100.0 * n / d
+        print(f"[retarget diagnostic] "
+              f"fatras_retarget_invoked={fatras_rt_inv} succeeded={fatras_rt_ok} "
+              f"({_pct(fatras_rt_ok, fatras_rt_inv):.1f}%)  "
+              f"ckf_retarget_invoked={ckf_rt_inv} succeeded={ckf_rt_ok} "
+              f"({_pct(ckf_rt_ok, ckf_rt_inv):.1f}%)")
+        # Apex-inside-shell diagnostic (temporary instrumentation). Per
+        # barrel sensor layer: how many times a turning point fired
+        # geometrically inside that layer's apr=1/apr=2 shell, and how
+        # many of those fire-events were followed by a sensor hit on the
+        # same layer (recovery). not_recovered = inside - recovered.
+        snap = acts.apexInsideShellSnapshot()
+        if snap:
+            print(f"[apex-inside-shell diagnostic]")
+            print(f"  {'layer':<10} {'inside':>8} {'recovered':>10} "
+                  f"{'not_recovered':>14} {'recovery%':>10}")
+            t_in = t_rec = 0
+            for vol, lay, n_inside, n_rec in sorted(snap):
+                t_in += n_inside
+                t_rec += n_rec
+                print(f"  V{vol}L{lay:<7} {n_inside:>8} {n_rec:>10} "
+                      f"{n_inside - n_rec:>14} "
+                      f"{_pct(n_rec, n_inside):>9.1f}%")
+            print(f"  {'TOTAL':<10} {t_in:>8} {t_rec:>10} "
+                  f"{t_in - t_rec:>14} {_pct(t_rec, t_in):>9.1f}%")

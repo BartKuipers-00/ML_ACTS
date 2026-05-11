@@ -21,6 +21,14 @@ struct NavigatorStatistics {
 
   /// Number of volume switches
   std::size_t nVolumeSwitches = 0;
+
+  /// Number of times the navigator re-ran Layer::compatibleSurfaces during
+  /// the same layer entry because a sensitive surface returned unreachable.
+  std::size_t nSensitiveRetargets = 0;
+
+  /// Number of layer entries in which a retarget was followed by reaching at
+  /// least one sensitive module on the same layer (counted once per layer).
+  std::size_t nSensitiveRetargetSuccesses = 0;
 };
 
 }  // namespace Acts

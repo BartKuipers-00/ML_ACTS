@@ -11,8 +11,10 @@
 #include "Acts/Material/IMaterialDecorator.hpp"
 #include "Acts/Propagator/Navigator.hpp"
 #include "Acts/Surfaces/BoundaryTolerance.hpp"
+#include "Acts/Surfaces/CylinderBounds.hpp"
 #include "Acts/Surfaces/Surface.hpp"
 #include "Acts/Surfaces/SurfaceArray.hpp"
+#include "Acts/Utilities/HelixIntersection.hpp"
 #include "Acts/Utilities/Helpers.hpp"
 #include "Acts/Utilities/Intersection.hpp"
 #include "Acts/Utilities/StringHelpers.hpp"
@@ -127,6 +129,15 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
   double nearLimit = options.nearLimit;
   double farLimit = options.farLimit;
 
+  // True iff the navigator has populated helix info (i.e. we're in the
+  // inward-barrel regime where the trajectory's curvature significantly
+  // differs from a line over the candidate-list construction's relevant
+  // path lengths). Used both for the bin-lookup raycast and the per-surface
+  // intersect predicate selection.
+  const bool helixRegime = options.helixBField.norm() > 0.0 &&
+                           options.helixQOverP != 0.0 &&
+                           options.helixDirection.squaredNorm() > 0.0;
+
   auto isUnique = [&](const SurfaceIntersection& b) {
     return std::ranges::none_of(sIntersections, [&b](const auto& a) {
       return &a.surface() == &b.surface() && a.index() == b.index();
@@ -163,21 +174,60 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
     if (rangeContainsValue(options.externalSurfaces, sf.geometryId())) {
       boundaryTolerance = BoundaryTolerance::Infinite();
     }
-    // PATCH (currently DISABLED — upstream-clean state):
-    //   force infinite boundary tolerance for sensitive surfaces.
-    //   Paired with the at()-based surface-array lookup below: at() returns
-    //   only one phi-bin's primary sensor, so the candidate's plane must be
-    //   treated as unbounded to catch trajectories that physically cross the
-    //   module's silicon outside the bin's nominal extent. Re-enable this
-    //   block AND the at()/lookupPosition block below to apply the patch;
-    //   leave both commented out (and neighbors() active) for upstream-clean.
-    // if (sensitive) {
-    //   boundaryTolerance = BoundaryTolerance::Infinite();
-    // }
-    // the surface intersection
-    SurfaceIntersection sfi =
-        sf.intersect(gctx, position, direction, boundaryTolerance).closest();
-    
+    // Predicate selection in compatibleSurfaces:
+    //   sensitive modules in the helix regime → helix-plane (with raw
+    //                                            tangent), bounded check on
+    //                                            the actual curved landing.
+    //   approach / boundary / layer-rep in the helix regime → line predicate
+    //                                            with PURE radial inward as
+    //                                            direction. These cylinders
+    //                                            are radially well-conditioned
+    //                                            in the barrel; pure radial
+    //                                            gives the cleanest intersect.
+    //   anything else (outward motion, non-barrel) → line with the supplied
+    //                                            `direction` (raw tangent).
+    // The path-length mismatch between helix-arc (sensors) and line-radial
+    // (approaches) is resolved by the sensor-priority sort in
+    // Navigator::resolveSurfaces: sensors come before approach surfaces in
+    // navSurfaces regardless of path length, so the navigator targets every
+    // sensor before falling through to the layer-exit approach.
+    SurfaceIntersection sfi = SurfaceIntersection::invalid();
+    // Compute radial motion sign at this position+direction. The pure-
+    // radial-inward substitution for non-sensitive surfaces makes sense
+    // only when the trajectory is heading inward; for outward motion the
+    // raw tangent is correct.
+    const double rxyAtPos = std::sqrt(position[0] * position[0] +
+                                       position[1] * position[1]);
+    const double prDir =
+        (rxyAtPos > 1.0e-6)
+            ? (position[0] * direction[0] + position[1] * direction[1]) /
+                  rxyAtPos
+            : 0.0;
+    const bool inwardMotionLocal = prDir < 0.0;
+    if (options.radialDownMode && sensitive && rxyAtPos > 1.0e-6) {
+      // Radial-down mode for sensors: use line + pure radial-inward
+      // direction (no helix). The bin lookup already used the radial-down
+      // projection; the per-surface intersect now also uses the radial-
+      // inward line for the bounded check. Sensors directly below the
+      // trajectory's current (phi, z) pass; sensors offset in phi by more
+      // than the silicon width fail. Strict BoundaryTolerance::None.
+      const Vector3 radialDownDir{-position[0] / rxyAtPos,
+                                  -position[1] / rxyAtPos, 0.0};
+      sfi = sf.intersect(gctx, position, radialDownDir, boundaryTolerance)
+                .closest();
+    } else if (helixRegime && sensitive) {
+      sfi = detail::helixPlaneIntersection(
+          gctx, sf, position, options.helixDirection, options.helixQOverP,
+          options.helixBField, boundaryTolerance);
+    } else if (helixRegime && inwardMotionLocal) {
+      // Pure radial inward (only for non-sensitive in inward motion).
+      const Vector3 inwardDir{-position[0] / rxyAtPos,
+                              -position[1] / rxyAtPos, 0.0};
+      sfi = sf.intersect(gctx, position, inwardDir, boundaryTolerance).closest();
+    } else {
+      sfi = sf.intersect(gctx, position, direction, boundaryTolerance).closest();
+    }
+
     if (!sfi.isValid()) {
       return;
     }
@@ -199,7 +249,16 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
   // the approach surfaces are in principle always testSurfaces
   // - the surface on approach is excluded via the veto
   // - the surfaces are only collected if needed
-  if (m_approachDescriptor &&
+  //
+  // SKIP this section when radial-down mode is active. apr=1 is always
+  // reachable from anywhere in the shell with a small path length; once
+  // it's in navSurfaces, the sensor-priority sort keeps sensors first
+  // but the navigator falls through to apr=1 the moment all helix-bin
+  // sensors get filtered out — short-circuiting the per-step
+  // re-resolve that the radial-down mode is designed to drive. apr=1
+  // re-enters the candidate pool via the standard layerTarget path once
+  // radial-down mode exits at r < apr1_r + 3 mm.
+  if (m_approachDescriptor && !options.radialDownMode &&
       (options.resolveMaterial || options.resolvePassive)) {
     // the approach surfaces
     const std::vector<const Surface*>& approachSurfaces =
@@ -255,12 +314,54 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
     // this PATCH block out (lookupPosition stays unused) and pass `position`
     // back to neighbors() below.
     Vector3 lookupPosition = position;
-    if (SurfaceIntersection sIntersection =
-            surfaceRepresentation()
-                .intersect(gctx, position, direction)
-                .closest();
-        sIntersection.isValid()) {
-      lookupPosition = sIntersection.position();
+    // RADIAL-DOWN MODE: project the current position radially onto the
+    // layer's representing cylinder (r=r_m). The 3×3 bin neighbourhood
+    // centres on the trajectory's CURRENT (phi, z) at r_m — which is
+    // the bin the trajectory will pass through next as it descends. Re-
+    // run every retarget as the trajectory steps, so each query samples
+    // the local bin.
+    if (options.radialDownMode &&
+        surfaceRepresentation().type() == Surface::SurfaceType::Cylinder) {
+      const auto& cylBounds = static_cast<const CylinderBounds&>(
+          surfaceRepresentation().bounds());
+      const double rLayer = cylBounds.get(CylinderBounds::eR);
+      const double rxy = std::sqrt(position[0] * position[0] +
+                                   position[1] * position[1]);
+      if (rxy > 1.0e-6) {
+        lookupPosition = Vector3{position[0] * (rLayer / rxy),
+                                 position[1] * (rLayer / rxy),
+                                 position[2]};
+      }
+    } else {
+      // Bin lookup direction: in the helix regime, ray-cast the helix's
+      // transverse circle onto the layer's representing cylinder so the
+      // 3×3 phi-z bin neighbourhood centres on the *curved* trajectory's
+      // actual layer crossing, not where a near-tangent line tangent
+      // would land. Outside the helix regime, fall back to the line
+      // ray-cast onto the representing surface as before.
+      bool helixLookupOk = false;
+      if (helixRegime &&
+          surfaceRepresentation().type() == Surface::SurfaceType::Cylinder) {
+        const auto& cylBounds = static_cast<const CylinderBounds&>(
+            surfaceRepresentation().bounds());
+        const double rLayer = cylBounds.get(CylinderBounds::eR);
+        Vector3 helixLanding;
+        if (detail::helixBarrelCylinderLanding(
+                position, options.helixDirection, options.helixQOverP,
+                options.helixBField, rLayer, helixLanding)) {
+          lookupPosition = helixLanding;
+          helixLookupOk = true;
+        }
+      }
+      if (!helixLookupOk) {
+        if (SurfaceIntersection sIntersection =
+                surfaceRepresentation()
+                    .intersect(gctx, position, direction)
+                    .closest();
+            sIntersection.isValid()) {
+          lookupPosition = sIntersection.position();
+        }
+      }
     }
     // ── /PATCH ──────────────────────────────────────────────────────────
     const std::vector<const Surface*>& sensitiveSurfaces =
@@ -275,9 +376,14 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
 
   // (C) representing surface section
   //
-  // the layer surface itself is a testSurface
-  const Surface* layerSurface = &surfaceRepresentation();
-  processSurface(*layerSurface);
+  // the layer surface itself is a testSurface. SKIP in radial-down mode
+  // for the same reason as the approach surfaces (section A): the layer
+  // rep is always reachable from inside the shell and would short-circuit
+  // the per-step sensor re-resolve.
+  if (!options.radialDownMode) {
+    const Surface* layerSurface = &surfaceRepresentation();
+    processSurface(*layerSurface);
+  }
 
   return sIntersections;
 }

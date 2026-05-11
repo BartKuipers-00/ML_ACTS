@@ -203,10 +203,11 @@ class StraightLineStepper {
       State& state, const Surface& surface, std::uint8_t index,
       Direction navDir, const BoundaryTolerance& boundaryTolerance,
       double surfaceTolerance, ConstrainedStep::Type stype, bool isInBarrelVolume,
+      bool radialDownMode = false,
       const Logger& logger = getDummyLogger()) const {
     return detail::updateSingleSurfaceStatus<StraightLineStepper>(
         *this, state, surface, index, navDir, boundaryTolerance,
-        surfaceTolerance, stype, isInBarrelVolume, logger);
+        surfaceTolerance, stype, isInBarrelVolume, radialDownMode, logger);
   }
 
   /// Update step size

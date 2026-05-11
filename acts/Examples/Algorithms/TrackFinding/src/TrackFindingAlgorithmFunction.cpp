@@ -53,12 +53,15 @@ std::shared_ptr<ActsExamples::TrackFindingAlgorithm::TrackFinderFunction>
 ActsExamples::TrackFindingAlgorithm::makeTrackFinderFunction(
     std::shared_ptr<const Acts::TrackingGeometry> trackingGeometry,
     std::shared_ptr<const Acts::MagneticFieldProvider> magneticField,
-    const Acts::Logger& logger) {
+    const Acts::Logger& logger, int maxSurfaceRetargets) {
   Stepper stepper(std::move(magneticField));
   Navigator::Config cfg{std::move(trackingGeometry)};
   cfg.resolvePassive = false;
   cfg.resolveMaterial = true;
   cfg.resolveSensitive = true;
+  cfg.maxSurfaceRetargets = maxSurfaceRetargets;
+  cfg.propagationContext =
+      Acts::Navigator::Config::PropagationContext::TrackFinding;
   Navigator navigator(cfg, logger.cloneWithSuffix("Navigator"));
   Propagator propagator(std::move(stepper), std::move(navigator),
                         logger.cloneWithSuffix("Propagator"));

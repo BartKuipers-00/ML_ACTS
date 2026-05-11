@@ -53,8 +53,9 @@ concept CommonStepper = requires {
 
     requires requires(const Surface& sf, std::uint8_t ui, Direction d,
                       const BoundaryTolerance& bt, double sc,
-                      ConstrainedStep::Type st, bool b, const Logger& l) {
-      { s.updateSurfaceStatus(t, sf, ui, d, bt, sc, st, b, l) };
+                      ConstrainedStep::Type st, bool b, bool rdm,
+                      const Logger& l) {
+      { s.updateSurfaceStatus(t, sf, ui, d, bt, sc, st, b, rdm, l) };
     };
 
     requires requires(const ConstrainedStep::Type st) {

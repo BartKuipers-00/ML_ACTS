@@ -499,6 +499,7 @@ class MultiStepperLoop : public single_stepper_t {
       State& state, const Surface& surface, std::uint8_t index,
       Direction navDir, const BoundaryTolerance& boundaryTolerance,
       double surfaceTolerance, ConstrainedStep::Type stype, bool isInBarrelVolume,
+      bool radialDownMode = false,
       const Logger& logger = getDummyLogger()) const {
     using Status = IntersectionStatus;
 
@@ -507,7 +508,7 @@ class MultiStepperLoop : public single_stepper_t {
     for (auto& component : state.components) {
       component.status = detail::updateSingleSurfaceStatus<SingleStepper>(
           *this, component.state, surface, index, navDir, boundaryTolerance,
-          surfaceTolerance, stype, isInBarrelVolume, logger);
+          surfaceTolerance, stype, isInBarrelVolume, radialDownMode, logger);
       ++counts[static_cast<std::size_t>(component.status)];
     }
 

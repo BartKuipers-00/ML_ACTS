@@ -1,16 +1,15 @@
 {
   "simulation": {
-    "events": 500,
-    "numThreads": -1,
+    "events": 10000,
+    "numThreads": 1,
     "randomSeed": 42,
-    "comment": "MaxSteps: Maximal steps in propagator per particle (otherwise terminate)",
     "maxSteps": 100000,
     "loopFraction": 1,
     "eventGenerator": {
-      "_comment": "One Generator per entry in particleTypes is created. Each species contributes particlesPerVertex particles per vertex (multiplicity vertices per event). Total particles per event = particlesPerVertex × len(particleTypes) × multiplicity.",
-      "particleTypes": ["muon", "pionplus", "electron", "proton"],
+      "particleTypes": [
+        "muon"
+      ],
       "momentum": {
-        "_comment": "Units are in GeV. pTransverse=true means pT is sampled uniformly; false means total p.",
         "min": 0.1,
         "max": 0.5,
         "transverse": true
@@ -25,29 +24,28 @@
         "max": 360.0
       },
       "particlesPerVertex": 1,
-      "multiplicity": 75,
+      "multiplicity": 1,
       "randomizeCharge": true
     }
   },
   "detector": {
     "field": {
       "strength": 2,
-      "direction": [0, 0, 1]
+      "direction": [
+        0,
+        0,
+        1
+      ]
     },
     "geometry": {
       "seedingConfig": "generic-seeding-config.json"
     }
   },
-
   "simulation_physics": {
-    "enableInteractions": true ,
+    "enableInteractions": true,
     "comment": "Total momentum (not pT). Particle stops propagating below this. Units: GeV.",
     "pMin": 0.01
   },
-
-
-
-
   "particleSelection": {
     "_comment": "Truth-particle filter applied AFTER digitization (addDigiParticleSelection). Particles failing these cuts are removed from particles_selected and therefore do NOT enter the efficiency denominator (and cannot be matched, so also not the numerator).",
     "pt": {
@@ -62,10 +60,9 @@
     },
     "removeNeutral": true
   },
-  
   "seeding": {
     "truthSmearedSeeded": false,
-    "truthEstimatedSeeded": false ,
+    "truthEstimatedSeeded": false,
     "comment": "Set truthEstimatedSeeded=true to use truth-estimated seeding.",
     "smearing": {
       "loc0": 0.0,
@@ -105,10 +102,13 @@
     },
     "finderOptions": {
       "bFieldInZ": 2,
-      "beamPos": [0.0, 0.0]
+      "beamPos": [
+        0.0,
+        0.0
+      ]
     },
     "filterConfig": {
-      "deltaInvHelixDiameter": 5.0e-5,
+      "deltaInvHelixDiameter": 5e-05,
       "deltaRMin": 5.0,
       "compatSeedWeight": 200.0,
       "impactWeightFactor": 1.0,
@@ -135,7 +135,14 @@
     },
     "initialSigmaQoverPt": 0.1,
     "initialSigmaPtRel": 0.1,
-    "initialVarInflation": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    "initialVarInflation": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ]
   },
   "trackFinding": {
     "selectorConfig": {
@@ -161,9 +168,13 @@
       "chi2CutOffOutlier": 25.0,
       "numMeasurementsCutOff": 1,
       "maxSteps": 100000,
-      "seedDeduplication": true ,
+      "seedDeduplication": true,
       "stayOnSeed": true
     }
+  },
+  "navigation": {
+    "_comment": "Per-layer cap on the navigator's sensitive-surface retarget retries. When the navigator's original navSurfaces candidate list is exhausted with NO sensitive hit on a sensor-bearing layer, it re-runs Layer::compatibleSurfaces from the (closer) current position. Resets per layer/volume switch. Same value applied to Fatras and CKF propagators. Set to 0 to disable.",
+    "max_surface_retargets": 0
   },
   "matchingFractionThreshold": 0.7,
   "output": {
@@ -172,7 +183,6 @@
     "csvSubdir": "csv"
   },
   "logging": {
-    "comment": "Logging levels: INFO, DEBUG, VERBOSE. n = stepper log interval.",
     "level": "INFO",
     "n": 0
   }

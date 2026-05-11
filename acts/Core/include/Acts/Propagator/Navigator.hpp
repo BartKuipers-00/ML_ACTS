@@ -19,6 +19,7 @@
 #include "Acts/Propagator/NavigatorError.hpp"
 #include "Acts/Propagator/NavigatorOptions.hpp"
 #include "Acts/Propagator/NavigatorStatistics.hpp"
+#include "Acts/Propagator/StepLimitDiagnostics.hpp"
 #include "Acts/Surfaces/BoundaryTolerance.hpp"
 #include "Acts/Surfaces/Surface.hpp"
 #include "Acts/Utilities/Intersection.hpp"
@@ -26,6 +27,7 @@
 #include "Acts/Utilities/StringHelpers.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <map>
 #include <optional>
@@ -64,6 +66,37 @@ struct NavigationOptions {
   double nearLimit = 0;
   /// The maximum distance for a surface to be considered
   double farLimit = std::numeric_limits<double>::max();
+
+  /// Helix model for the per-surface intersect predicate inside
+  /// Layer::compatibleSurfaces. When `helixBField.norm() > 0` and
+  /// `helixQOverP != 0`, the closed-form helix-plane intersect is used for
+  /// sensitive surfaces (with bounded check on the actual curved landing
+  /// point) instead of the line predicate. Outside this regime — and for
+  /// non-sensitive surfaces — the line predicate is used unchanged.
+  /// Set by the navigator from stepper state when it has reason to believe
+  /// the trajectory's curvature significantly differs from a line over the
+  /// candidate-list construction's relevant path lengths.
+  double helixQOverP = 0.0;
+  Vector3 helixBField = Vector3::Zero();
+  /// The actual stepper tangent (raw direction). Distinct from the
+  /// `direction` argument to `compatibleSurfaces`, which the navigator
+  /// substitutes (e.g. with the radial bisector) to make the line-tangent
+  /// predicate well-behaved at the bin lookup. The helix predicate needs
+  /// the raw tangent to compute the helix center correctly.
+  Vector3 helixDirection = Vector3::Zero();
+
+  /// Radial-down per-step targeting mode for the inward barrel shell.
+  /// Set by the navigator when the trajectory is descending through a
+  /// sensor barrel layer's shell and has not yet hit a sensor on this
+  /// layer entry. When true, Layer::compatibleSurfaces does a single bin
+  /// lookup at the radial-down projection (current phi/z mapped to the
+  /// layer's mean r) and returns ONLY those sensors (no approach
+  /// surfaces). The navigator then re-queries every retarget (small step
+  /// past the targeted sensor's radial distance). This recovers the
+  /// missing-incoming-arc hits that the standard bin-lookup-once
+  /// approach loses because the single entry-position bin lookup is
+  /// stale by the time the trajectory has stepped through the shell.
+  bool radialDownMode = false;
 };
 
 /// @brief Steers the propagation through the geometry by providing the next
@@ -117,6 +150,22 @@ class Navigator {
     bool resolveMaterial = true;
     /// stop at every surface regardless what it is
     bool resolvePassive = false;
+
+    /// Maximum number of times to re-call Layer::compatibleSurfaces for the
+    /// current layer entry when a sensitive surface returned unreachable.
+    /// 0 disables retargeting (legacy behaviour). The counter resets on every
+    /// layer/volume switch.
+    int maxSurfaceRetargets = 3;
+
+    /// Stage label used for atomic-counter attribution of retarget events.
+    /// Set by the algorithm constructor (Fatras / TrackFinding / Other);
+    /// the navigator switches on it when bumping the global retarget counters.
+    enum class PropagationContext : std::uint8_t {
+      Other = 0,
+      Fatras = 1,
+      TrackFinding = 2,
+    };
+    PropagationContext propagationContext = PropagationContext::Other;
   };
 
   /// The navigator options
@@ -203,6 +252,40 @@ class Navigator {
     /// Only checked/updated when radiallyInward is true
     bool isInBarrelVolume = false;
 
+    /// Stepper-side helix model snapshot, refreshed by the propagator each
+    /// step. The navigator forwards these into NavigationOptions::helix*
+    /// when calling Layer::compatibleSurfaces inside the inward-barrel
+    /// regime, so the candidate-list construction can use the closed-form
+    /// helix-plane intersect for sensitive surfaces. helixBField == 0 means
+    /// "no helix info available, fall back to line predicate".
+    double currentQOverP = 0.0;
+    Vector3 currentBField = Vector3::Zero();
+
+    /// Remaining retarget budget for the current layer entry. Decremented on
+    /// each retarget. Refilled by the navigator from m_cfg.maxSurfaceRetargets
+    /// on every layer/volume switch (and in initialize()).
+    int surfaceRetargetRemaining = 0;
+
+    /// True iff at least one retarget was issued since this state entered the
+    /// current layer. Latches until the next layer/volume switch; consumed by
+    /// handleSurfaceReached when a sensitive arrival happens, to bump the
+    /// "succeeded" counter exactly once per successful retarget chain.
+    bool retargetInvokedSinceLayerEntry = false;
+
+    /// True iff at least one sensitive module was reached during this layer
+    /// entry. Used by nextTarget() to decide whether to fire a retarget when
+    /// the navSurfaces list is exhausted: if we already hit a sensitive on
+    /// this layer, no need to re-resolve.
+    bool sensitiveHitOnLayer = false;
+
+    /// Apex-inside-shell diagnostic latch (temporary instrumentation).
+    /// Set by Propagator.ipp when a turning point fires geometrically inside
+    /// a barrel layer's apr=1/apr=2 shell; pointer to that layer. Cleared
+    /// (and 'recovered' counter bumped) on the first subsequent sensitive
+    /// arrival on the same layer. Cleared without recovery on layer/volume
+    /// switch / full reset.
+    const Layer* apexInsideLayer = nullptr;
+
     NavigatorStatistics statistics;
 
     NavigationStream stream;
@@ -210,6 +293,7 @@ class Navigator {
     void resetAfterLayerSwitch() {
       navSurfaces.clear();
       navSurfaceIndex.reset();
+      apexInsideLayer = nullptr;  // not-recovered case: trajectory left layer
     }
 
     void resetAfterVolumeSwitch() {
@@ -316,6 +400,7 @@ class Navigator {
                                 << printGeometryVersion(m_geometryVersion));
 
     state.reset();
+    resetSurfaceRetargetBudget(state);
 
     // Empirical pre-allocation of candidates for the next navigation iteration.
     // @TODO: Make this user configurable through the configuration
@@ -437,7 +522,7 @@ class Navigator {
 
       if (state.navigationStage == Stage::surfaceTarget) {
         if (!state.navSurfaceIndex.has_value()) {
-          // First time, resolve the surfaces
+          // First time (or after a retarget below), resolve the surfaces
           resolveSurfaces(state, position, direction);
           state.navSurfaceIndex = 0;
           // Log surface list contents
@@ -453,15 +538,67 @@ class Navigator {
           ACTS_VERBOSE(volInfo(state) << "Target set to next surface.");
           return NavigationTarget(state.navSurface().surface(),
                                   state.navSurface().index(),
-                                  state.navSurface().boundaryTolerance());
-        } else {
-          // This was the last surface, switch to layers
-          ACTS_VERBOSE(volInfo(state) << "Target layers.");
-          if (m_geometryVersion == GeometryVersion::Gen1) {
-            state.navigationStage = Stage::layerTarget;
-          } else {
-            state.navigationStage = Stage::boundaryTarget;
+                                  state.navSurface().boundaryTolerance(),
+                                  checkRadialDownActive(state, position));
+        }
+
+        // navSurfaces list exhausted (the existing maxTargetSkipping
+        // fallback iterated through every original candidate). If we never
+        // hit a sensitive module on this layer, the layer actually carries
+        // a sensor array (skip BeamPipe-style passive layers), and we still
+        // have retarget budget, do a fresh ray-cast: clear the (stale) list
+        // and re-run Layer::compatibleSurfaces from the current position.
+        // The new bin lookup may surface modules the original (approach-time)
+        // raycast missed because it was near-tangent.
+        const bool layerHasSensors =
+            state.currentLayer != nullptr &&
+            state.currentLayer->surfaceArray() != nullptr;
+        // Radial-down mode check: when the trajectory is in the inward
+        // barrel shell with no sensor hit yet, we want to retarget at
+        // every step (each step lands in a new bin) — bypass the normal
+        // 3-retarget budget. The standard budget still applies outside
+        // radial-down mode.
+        const bool radialDownActive = checkRadialDownActive(state, position);
+        const bool budgetOk = radialDownActive ||
+                              state.surfaceRetargetRemaining > 0;
+        // Bypass the !sensitiveHitOnLayer gate when in radial-down mode.
+        // For miss_in tracks the outgoing arc set the latch; we still need
+        // to retarget on the incoming arc to find the incoming-arc sensor.
+        const bool hitGateOk = radialDownActive || !state.sensitiveHitOnLayer;
+        if (hitGateOk && layerHasSensors && budgetOk) {
+          if (!radialDownActive) {
+            --state.surfaceRetargetRemaining;
           }
+          state.retargetInvokedSinceLayerEntry = true;
+          incrementRetargetInvoked(m_cfg.propagationContext);
+          ++state.statistics.nSensitiveRetargets;
+          ACTS_VERBOSE(volInfo(state)
+                       << "navSurfaces exhausted with no sensitive hit; "
+                          "retarget triggered (radialDown="
+                       << radialDownActive << " budget remaining="
+                       << state.surfaceRetargetRemaining << ")");
+          state.navSurfaces.clear();
+          state.navSurfaceIndex.reset();
+          // Re-resolve immediately and return the first new candidate (if any).
+          resolveSurfaces(state, position, direction);
+          state.navSurfaceIndex = 0;
+          ACTS_VERBOSE(volInfo(state) << "navSurfaces (post-retarget) has "
+                                      << state.navSurfaces.size() << " items");
+          if (state.navSurfaceIndex.value() < state.navSurfaces.size()) {
+            return NavigationTarget(state.navSurface().surface(),
+                                    state.navSurface().index(),
+                                    state.navSurface().boundaryTolerance(),
+                                    checkRadialDownActive(state, position));
+          }
+          // Re-resolution returned an empty list — fall through to layerTarget.
+        }
+
+        // No (more) candidates — switch to layers
+        ACTS_VERBOSE(volInfo(state) << "Target layers.");
+        if (m_geometryVersion == GeometryVersion::Gen1) {
+          state.navigationStage = Stage::layerTarget;
+        } else {
+          state.navigationStage = Stage::boundaryTarget;
         }
       }
 
@@ -530,6 +667,7 @@ class Navigator {
     }
 
     state.reset();
+    resetSurfaceRetargetBudget(state);
     ++state.statistics.nRenavigations;
 
     // We might have punched through a boundary and entered another volume
@@ -604,6 +742,45 @@ class Navigator {
         &state.navSurface().surface() == &surface) {
       ACTS_VERBOSE(volInfo(state) << "Handling surface status.");
 
+      const bool isSensitive = surface.geometryId().sensitive() != 0;
+      if (isSensitive) {
+        // Latch: prevents the navSurfaces-exhaustion path from retargeting
+        // again on this layer entry, since we already got at least one hit.
+        state.sensitiveHitOnLayer = true;
+
+        // If a retarget was issued on this layer entry and we just landed
+        // on a sensitive module, count it as a "succeeded" retarget exactly
+        // once per layer. The latch is cleared so subsequent sensitive
+        // arrivals on the same layer don't double-count.
+        if (state.retargetInvokedSinceLayerEntry) {
+          incrementRetargetSucceeded(m_cfg.propagationContext);
+          ++state.statistics.nSensitiveRetargetSuccesses;
+          state.retargetInvokedSinceLayerEntry = false;
+          ACTS_VERBOSE(volInfo(state) << "Sensitive retarget succeeded on "
+                                      << surface.geometryId());
+        }
+
+        // Apex-inside-shell diagnostic: if the apex turning point fired
+        // inside this layer's shell AND we just landed on a sensitive
+        // module of the same layer, count it as recovered. Latch cleared
+        // so subsequent hits don't double-count.
+        if (state.apexInsideLayer != nullptr) {
+          const auto latchedGeo =
+              state.apexInsideLayer->surfaceRepresentation().geometryId();
+          const auto hitGeo = surface.geometryId();
+          if (hitGeo.volume() == latchedGeo.volume() &&
+              hitGeo.layer() == latchedGeo.layer()) {
+            detail::bumpApexInsideShellRecovered(
+                static_cast<std::uint32_t>(hitGeo.volume()),
+                static_cast<std::uint32_t>(hitGeo.layer()));
+            ACTS_VERBOSE(volInfo(state)
+                         << "Apex-inside-shell recovered on "
+                         << surface.geometryId());
+            state.apexInsideLayer = nullptr;
+          }
+        }
+      }
+
       return;
     }
 
@@ -617,6 +794,7 @@ class Navigator {
 
       // partial reset
       state.resetAfterLayerSwitch();
+      resetSurfaceRetargetBudget(state);
 
       return;
     }
@@ -648,6 +826,7 @@ class Navigator {
 
       // partial reset
       state.resetAfterVolumeSwitch();
+      resetSurfaceRetargetBudget(state);
 
       if (state.currentVolume != nullptr) {
         ACTS_VERBOSE(volInfo(state) << "Volume updated.");
@@ -669,6 +848,44 @@ class Navigator {
   }
 
  private:
+  /// @brief Check radial-down mode trigger conditions.
+  ///
+  /// Returns true if the trajectory is currently in the inward barrel
+  /// shell with no sensor hit yet (matches the conditions set in
+  /// resolveSurfaces, but evaluable without re-running it). Used by
+  /// nextTarget's retarget block to bypass the per-layer retarget budget
+  /// in radial-down mode: each step lands in a new bin and we want a
+  /// fresh resolve every retarget.
+  bool checkRadialDownActive(const State& state,
+                             const Vector3& position) const {
+    // Mirror the resolveSurfaces trigger: gated on apexInsideLayer latch.
+    // No isInBarrelVolume check — stale after TP-fix surfaceTarget restart.
+    if (!state.radiallyInward ||
+        state.currentLayer == nullptr ||
+        state.currentLayer->surfaceArray() == nullptr ||
+        state.apexInsideLayer != state.currentLayer) {
+      return false;
+    }
+    const auto* ad = state.currentLayer->approachDescriptor();
+    if (ad == nullptr) return false;
+    double aprMin = std::numeric_limits<double>::infinity();
+    double aprMax = -std::numeric_limits<double>::infinity();
+    for (const auto* asurf : ad->containedSurfaces()) {
+      if (asurf == nullptr) continue;
+      const auto vals = asurf->bounds().values();
+      if (!vals.empty()) {
+        const double r = vals[0];
+        aprMin = std::min(aprMin, r);
+        aprMax = std::max(aprMax, r);
+      }
+    }
+    if (!(aprMin < aprMax)) return false;
+    constexpr double kApr1SafetyMargin = 3.0;
+    const double rxy = std::sqrt(position[0] * position[0] +
+                                 position[1] * position[1]);
+    return rxy < aprMax && rxy > aprMin + kApr1SafetyMargin;
+  }
+
   /// @brief Resolve compatible surfaces
   ///
   /// This function resolves the compatible surfaces for the navigation.
@@ -698,6 +915,73 @@ class Navigator {
       navOpts.endObject = state.targetSurface;
       navOpts.nearLimit = state.options.nearLimit;
       navOpts.farLimit = state.options.farLimit;
+      // Forward helix model into compatibleSurfaces for the inward-barrel
+      // regime so the candidate-list construction's per-surface intersect
+      // uses the closed-form helix-plane predicate (with bounded check on
+      // the actual curved landing) instead of the line tangent. The raw
+      // tangent (`direction`) is passed via helixDirection because the
+      // `direction` argument to compatibleSurfaces is the bisector below.
+      // Set ACTS_DISABLE_HELIX_INTERSECT=1 in the environment for a clean
+      // line-everywhere baseline (matches the SteppingHelper switch).
+      static const bool helixDisabled =
+          std::getenv("ACTS_DISABLE_HELIX_INTERSECT") != nullptr;
+      // Forward helix info for ALL barrel motion (both inward and outward).
+      // The closed-form helix-plane intersect is direction-agnostic; using
+      // it on outward sensors too mitigates the symmetric apex-inside-shell
+      // miss-out failure mode (trajectory loses outgoing-arc hit when its
+      // line-tangent arc-length to the sensor is wrong while the helix
+      // arc-length is correct).
+      if (state.isInBarrelVolume && !helixDisabled) {
+        navOpts.helixQOverP = state.currentQOverP;
+        navOpts.helixBField = state.currentBField;
+        navOpts.helixDirection = direction;
+      }
+
+      // Radial-down per-step targeting mode for the inward barrel shell.
+      // Gate on apexInsideLayer == currentLayer: this latch is set by the
+      // turning-point block when the apex fires INSIDE the current layer's
+      // shell, and is cleared on layer/volume switch or successful sensor
+      // hit on the same layer. This restricts radial-down to the actual
+      // apex-inside-shell failure mode it was designed for; without this
+      // gate, radial-down activates for every inward sensor layer
+      // traversal post-apex, where the helix-arc step-size override
+      // overshoots into the next layer and breaks normal navigation
+      // (v5 regression: −30k complete hits across V8L*/V13L*).
+      // No isInBarrelVolume check — that flag is only updated by
+      // computeEffectiveDirection (called from compatibleLayers), so after
+      // a TP-fix surfaceTarget restart it can be stale. The geometric
+      // check (apexInsideLayer == currentLayer with sensor array) is the
+      // authoritative one.
+      if (state.radiallyInward &&
+          state.apexInsideLayer == currentLayer &&
+          currentLayer->surfaceArray() != nullptr) {
+        const double rxy = std::sqrt(position[0] * position[0] +
+                                     position[1] * position[1]);
+        // Find apr=1 r and apr=2 r from the layer's approach descriptor.
+        const auto* ad = currentLayer->approachDescriptor();
+        double aprMin = std::numeric_limits<double>::infinity();
+        double aprMax = -std::numeric_limits<double>::infinity();
+        if (ad != nullptr) {
+          for (const auto* asurf : ad->containedSurfaces()) {
+            if (asurf == nullptr) continue;
+            const auto vals = asurf->bounds().values();
+            if (!vals.empty()) {
+              const double r = vals[0];
+              aprMin = std::min(aprMin, r);
+              aprMax = std::max(aprMax, r);
+            }
+          }
+        }
+        constexpr double kApr1SafetyMargin = 3.0;  // mm
+        if (aprMin < aprMax && rxy < aprMax &&
+            rxy > aprMin + kApr1SafetyMargin) {
+          navOpts.radialDownMode = true;
+          ACTS_VERBOSE(volInfo(state)
+                       << "Radial-down mode active: layer "
+                       << currentLayer->geometryId() << " apr=[" << aprMin
+                       << ", " << aprMax << "] rxy=" << rxy);
+        }
+      }
 
       if (!state.options.externalSurfaces.empty()) {
         auto layerId = layerSurface->geometryId().layer();
@@ -710,40 +994,47 @@ class Navigator {
           navOpts.externalSurfaces.push_back(itSurface->second);
         }
       }
-      // Use bisector(tangent, radial-inward) on the return arc so the
-      // surface-array bin lookup (Layer::compatibleSurfaces ray-casts the
-      // trajectory line onto the representing surface to pick the phi-bin)
-      // and the per-surface intersect inside processSurface land on the
-      // sensitive module the trajectory is actually heading toward, not
-      // the one the near-tangential raw direction would project to.
-      Vector3 surfaceLookupDirection =
-          computeEffectiveDirection(state, position, direction,
-                                    /*useBisector=*/true);
+      // Pass the RAW stepper direction (no bisector substitution). The
+      // bisector heuristic was masking inconsistent path-length predictions
+      // between cylindrical approach surfaces (under-estimated) and planar
+      // sensors (helix-correct), causing the navigator to target approach
+      // surfaces ahead of the sensors. Layer::compatibleSurfaces handles its
+      // own substitutions internally:
+      //   sensors in helix regime → helix-plane (with raw tangent),
+      //   approach/boundary in helix regime → line + pure-radial-inward,
+      //   anything else → line + raw tangent.
       state.navSurfaces = currentLayer->compatibleSurfaces(
-          state.options.geoContext, position, surfaceLookupDirection, navOpts);
-      // Sort the surfaces by path length.
-      // Special care is taken for the external surfaces which should always
-      // come first, so they are preferred to be targeted and hit first.
+          state.options.geoContext, position, direction, navOpts);
+      // Sort the surfaces. Order of preference (high to low):
+      //   1. external surfaces (infinite boundary tolerance) — always first.
+      //   2. sensitive sensor modules — before approach / boundary / layer
+      //      surfaces, regardless of path length. The path-length predicates
+      //      for sensors (helix-plane arc) and approaches (line+pure-radial)
+      //      use different conventions, so direct path-length ordering is
+      //      unreliable; sensors-first ensures the navigator visits every
+      //      sensor candidate before falling through to a layer-exit
+      //      approach surface and skipping a sensor by mistake.
+      //   3. by path length within the same priority class.
       std::ranges::sort(
           state.navSurfaces,
           [&state](const SurfaceIntersection& a, const SurfaceIntersection& b) {
-            // Prefer to sort by path length. We assume surfaces are at the same
-            // distance if the difference is smaller than the tolerance.
+            const bool aIsExternal = a.boundaryTolerance().isInfinite();
+            const bool bIsExternal = b.boundaryTolerance().isInfinite();
+            if (aIsExternal != bIsExternal) {
+              return aIsExternal;  // external first
+            }
+            const bool aIsSensitive = a.surface().geometryId().sensitive() != 0;
+            const bool bIsSensitive = b.surface().geometryId().sensitive() != 0;
+            if (aIsSensitive != bIsSensitive) {
+              return aIsSensitive;  // sensors before non-sensors
+            }
+            // Same priority class — sort by path length, breaking ties by
+            // geometry id.
             if (std::abs(a.pathLength() - b.pathLength()) >
                 state.options.surfaceTolerance) {
               return SurfaceIntersection::pathLengthOrder(a, b);
             }
-            // If the path length is practically the same, sort by geometry.
-            // First we check if one of the surfaces is external.
-            bool aIsExternal = a.boundaryTolerance().isInfinite();
-            bool bIsExternal = b.boundaryTolerance().isInfinite();
-            if (aIsExternal == bIsExternal) {
-              // If both are external or both are not external, sort by geometry
-              // identifier
-              return a.surface().geometryId() < b.surface().geometryId();
-            }
-            // If only one is external, it should come first
-            return aIsExternal;
+            return a.surface().geometryId() < b.surface().geometryId();
           });
       // For now we implicitly remove overlapping surfaces.
       // For track finding it might be useful to discover overlapping surfaces
@@ -1037,6 +1328,52 @@ class Navigator {
     return (state.currentVolume != nullptr ? state.currentVolume->volumeName()
                                            : "No Volume") +
            " | ";
+  }
+
+  /// Refill the per-state retarget budget from the configured cap, and clear
+  /// the latch / per-layer hit flag. Called on every layer/volume switch and
+  /// on initialize() so each fresh layer entry starts with a full budget.
+  void resetSurfaceRetargetBudget(State& state) const {
+    state.surfaceRetargetRemaining = m_cfg.maxSurfaceRetargets;
+    state.retargetInvokedSinceLayerEntry = false;
+    state.sensitiveHitOnLayer = false;
+  }
+
+  /// Bump the global "retarget invoked" counter for the configured stage.
+  /// Other = no-op (counter not split for non-Fatras / non-CKF callers).
+  static void incrementRetargetInvoked(
+      typename Config::PropagationContext ctx) {
+    using PC = typename Config::PropagationContext;
+    switch (ctx) {
+      case PC::Fatras:
+        Acts::detail::fatrasRetargetInvokedCounter().fetch_add(
+            1, std::memory_order_relaxed);
+        break;
+      case PC::TrackFinding:
+        Acts::detail::ckfRetargetInvokedCounter().fetch_add(
+            1, std::memory_order_relaxed);
+        break;
+      case PC::Other:
+        break;
+    }
+  }
+
+  /// Bump the global "retarget succeeded" counter for the configured stage.
+  static void incrementRetargetSucceeded(
+      typename Config::PropagationContext ctx) {
+    using PC = typename Config::PropagationContext;
+    switch (ctx) {
+      case PC::Fatras:
+        Acts::detail::fatrasRetargetSucceededCounter().fetch_add(
+            1, std::memory_order_relaxed);
+        break;
+      case PC::TrackFinding:
+        Acts::detail::ckfRetargetSucceededCounter().fetch_add(
+            1, std::memory_order_relaxed);
+        break;
+      case PC::Other:
+        break;
+    }
   }
 
   /// @brief Check if volume contains barrel-like (cylindrical) layers

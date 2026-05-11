@@ -466,6 +466,7 @@ def addFatras(
     loopProtection: Optional[bool] = None,
     loopFraction: Optional[float] = None,
     debugStepInterval: Optional[int] = None,
+    maxSurfaceRetargets: Optional[int] = None,
     inputParticles: str = "particles_generated_selected",
     outputParticles: str = "particles_simulated",
     outputSimHits: str = "simhits",
@@ -518,6 +519,7 @@ def addFatras(
             **({} if loopProtection is None else {"loopProtection": loopProtection}),
             **({} if loopFraction is None else {"loopFraction": loopFraction}),
             **({} if debugStepInterval is None else {"debugStepInterval": debugStepInterval}),
+            **({} if maxSurfaceRetargets is None else {"maxSurfaceRetargets": maxSurfaceRetargets}),
         )
     )
 

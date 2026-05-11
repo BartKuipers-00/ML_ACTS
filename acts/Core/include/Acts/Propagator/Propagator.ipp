@@ -11,11 +11,17 @@
 #include "Acts/Propagator/Propagator.hpp"
 
 #include "Acts/EventData/TrackParametersConcept.hpp"
+#include "Acts/Geometry/Layer.hpp"
+#include "Acts/Geometry/TrackingVolume.hpp"
+
+#include <cstdlib>
+#include <sstream>
 #include "Acts/Propagator/ActorList.hpp"
 #include "Acts/Propagator/ConstrainedStep.hpp"
 #include "Acts/Propagator/NavigationTarget.hpp"
 #include "Acts/Propagator/PropagatorError.hpp"
 #include "Acts/Propagator/StandardAborters.hpp"
+#include "Acts/Propagator/StepLimitDiagnostics.hpp"
 #include "Acts/Propagator/detail/LoopProtection.hpp"
 #include "Acts/Utilities/Intersection.hpp"
 
@@ -55,7 +61,7 @@ Acts::Result<void> Acts::Propagator<S, N>::propagate(
           nextTarget.surfaceIntersectionIndex, state.options.direction,
           nextTarget.boundaryTolerance, state.options.surfaceTolerance,
           ConstrainedStep::Type::Navigator, state.navigation.isInBarrelVolume,
-          logger());
+          nextTarget.radialDownMode, logger());
       if (preStepSurfaceStatus == IntersectionStatus::onSurface) {
         // This indicates a geometry overlap which is not handled by the
         // navigator, so we skip this target.
@@ -109,6 +115,22 @@ Acts::Result<void> Acts::Propagator<S, N>::propagate(
     state.direction =
         state.options.direction * m_stepper.direction(state.stepping);
 
+    // Refresh the navigator's helix-model snapshot from the stepper so the
+    // next nextTarget() / Layer::compatibleSurfaces call can use the
+    // closed-form helix-plane predicate where applicable. The snapshot is
+    // optional — when the stepper exposes qOverP and getField — and only
+    // used by the navigator inside the inward-barrel regime.
+    if constexpr (requires {
+                    state.navigation.currentQOverP;
+                    m_stepper.qOverP(state.stepping);
+                    m_stepper.getField(state.stepping, state.position);
+                  }) {
+      state.navigation.currentQOverP = m_stepper.qOverP(state.stepping);
+      auto fieldRes = m_stepper.getField(state.stepping, state.position);
+      state.navigation.currentBField =
+          fieldRes.ok() ? *fieldRes : Vector3::Zero();
+    }
+
     ACTS_VERBOSE("Step with size " << *res << " performed. We are now at "
                                    << state.position.transpose()
                                    << " with direction "
@@ -127,33 +149,181 @@ Acts::Result<void> Acts::Propagator<S, N>::propagate(
           nextTarget.surfaceIntersectionIndex, state.options.direction,
           nextTarget.boundaryTolerance, state.options.surfaceTolerance,
           ConstrainedStep::Type::Navigator, state.navigation.isInBarrelVolume,
-          logger());
+          nextTarget.radialDownMode, logger());
       if (postStepSurfaceStatus == IntersectionStatus::onSurface) {
         m_navigator.handleSurfaceReached(state.navigation, state.position,
                                          state.direction, *nextTarget.surface);
       }
       if (postStepSurfaceStatus != IntersectionStatus::reachable) {
+        // Snapshot the surface that just became unreachable for diagnostics
+        // (nextTarget itself is reset to None below).
+        const Surface* unreachableSurface = nextTarget.surface;
         nextTarget = NavigationTarget::None();
         // Check if target became unreachable due to turning point detection
         // Only if stepper supports turning point detection
         if constexpr (requires { state.stepping.turningPointDetected; }) {
           if (state.stepping.turningPointDetected) {
             if constexpr (requires { state.navigation.navLayers; }) {
-              // radiallyInward_previous now contains the NEW direction after flip
-              // Copy boolean state directly from stepper to navigator
-              state.navigation.radiallyInward = state.stepping.radiallyInward_previous;
-              
-              // Reset navigation state to clear lists
-              state.navigation.resetAfterVolumeSwitch();
-              // Force navigation to restart at layerTarget stage
-              state.navigation.navigationStage = N::Stage::layerTarget;
-              
-              ACTS_VERBOSE("Turning point detected, resetting navigation for inward propagation");
+              const double rxyTP = std::sqrt(
+                  state.position[0] * state.position[0] +
+                  state.position[1] * state.position[1]);
+              const double zTP = state.position[2];
+              const double phiTP = std::atan2(state.position[1],
+                                              state.position[0]);
+              ACTS_VERBOSE("TP[apex] rxy="
+                           << rxyTP << " z=" << zTP << " phi=" << phiTP
+                           << " radInward=" << state.navigation.radiallyInward
+                           << " -> "
+                           << state.stepping.radiallyInward_previous
+                           << " stage="
+                           << static_cast<int>(
+                                  state.navigation.navigationStage));
+              ACTS_VERBOSE("TP[apex] currentVolume="
+                           << (state.navigation.currentVolume != nullptr
+                                   ? state.navigation.currentVolume
+                                         ->geometryId()
+                                   : Acts::GeometryIdentifier{})
+                           << " currentLayer="
+                           << (state.navigation.currentLayer != nullptr
+                                   ? state.navigation.currentLayer
+                                         ->geometryId()
+                                   : Acts::GeometryIdentifier{}));
+              if (unreachableSurface != nullptr) {
+                ACTS_VERBOSE("TP[apex] unreachable target geoId="
+                             << unreachableSurface->geometryId()
+                             << " sensitive="
+                             << (unreachableSurface->geometryId().sensitive() !=
+                                 0));
+              }
+              // Dump the current layer's approach surfaces (r-values) so we
+              // can tell whether the apex is geometrically between apr=1
+              // and apr=2 of the navigator's current layer.
+              if (state.navigation.currentLayer != nullptr) {
+                const auto* ad =
+                    state.navigation.currentLayer->approachDescriptor();
+                if (ad != nullptr) {
+                  for (const auto* asurf : ad->containedSurfaces()) {
+                    if (asurf == nullptr) continue;
+                    // For cylinder approach surfaces the radius is encoded
+                    // in surface bounds, not the translation. Try cast.
+                    const auto& bounds = asurf->bounds();
+                    auto vals = bounds.values();
+                    std::ostringstream bs;
+                    bs << "[";
+                    for (std::size_t k = 0; k < vals.size(); ++k) {
+                      if (k != 0) bs << ", ";
+                      bs << vals[k];
+                    }
+                    bs << "]";
+                    ACTS_VERBOSE("TP[apex] currentLayer approach geoId="
+                                 << asurf->geometryId() << " bounds="
+                                 << bs.str());
+                  }
+                }
+              }
+              // Push the post-flip direction into the navigator's bookkeeping.
+              state.navigation.radiallyInward =
+                  state.stepping.radiallyInward_previous;
+
+              // Decide whether the apex sits geometrically INSIDE the
+              // navigator's current sensor layer (rxy between apr=1 and
+              // apr=2 r-radii). If so, the layerTarget fallback would
+              // target apr=1 directly and the trajectory would step
+              // through the sensors at the layer's mean r unnoticed (the
+              // sensors are only added to navSurfaces AFTER apr=1 is
+              // reached, by which point they're behind the trajectory and
+              // get culled by negative path length). Force surfaceTarget
+              // on the same layer so compatibleSurfaces is called from
+              // the apex position with the new inward direction —
+              // sensors at r ≈ apr=1 + 5mm are then ahead and reachable.
+              bool apexInCurrentLayer = false;
+              if (state.navigation.currentLayer != nullptr &&
+                  state.navigation.currentLayer->surfaceArray() != nullptr) {
+                const auto* ad =
+                    state.navigation.currentLayer->approachDescriptor();
+                if (ad != nullptr) {
+                  double rmin = std::numeric_limits<double>::infinity();
+                  double rmax = -std::numeric_limits<double>::infinity();
+                  for (const auto* asurf : ad->containedSurfaces()) {
+                    if (asurf == nullptr) continue;
+                    auto vals = asurf->bounds().values();
+                    if (!vals.empty()) {
+                      const double r = vals[0];
+                      rmin = std::min(rmin, r);
+                      rmax = std::max(rmax, r);
+                    }
+                  }
+                  if (rmin < rmax) {
+                    apexInCurrentLayer = (rxyTP >= rmin && rxyTP <= rmax);
+                  }
+                }
+              }
+
+              // Diagnostic: latch + bump per-layer counter when apex is
+              // inside a sensor layer's shell. The latch in Navigator::State
+              // triggers the recovered-counter bump on the next sensor hit
+              // on the same layer; the not-recovered count is implicit
+              // (inside - recovered) when the layer is exited or the
+              // trajectory ends.
+              if (apexInCurrentLayer) {
+                const auto layerGeo =
+                    state.navigation.currentLayer
+                        ->surfaceRepresentation()
+                        .geometryId();
+                Acts::detail::bumpApexInsideShell(
+                    static_cast<std::uint32_t>(layerGeo.volume()),
+                    static_cast<std::uint32_t>(layerGeo.layer()));
+                state.navigation.apexInsideLayer =
+                    state.navigation.currentLayer;
+              }
+
+              // Env-gate the surfaceTarget fix so we can A/B with vs without.
+              // ACTS_DISABLE_TP_INSIDE_SHELL_FIX=1 → always full reset +
+              // layerTarget (the natural-baseline behaviour, used to measure
+              // the un-fixed failure mode).
+              static const bool tpInsideShellFixDisabled =
+                  std::getenv("ACTS_DISABLE_TP_INSIDE_SHELL_FIX") != nullptr;
+
+              if (apexInCurrentLayer && !tpInsideShellFixDisabled) {
+                state.navigation.navSurfaces.clear();
+                state.navigation.navSurfaceIndex.reset();
+                state.navigation.navLayers.clear();
+                state.navigation.navLayerIndex.reset();
+                state.navigation.navBoundaries.clear();
+                state.navigation.navBoundaryIndex.reset();
+                state.navigation.navigationStage = N::Stage::surfaceTarget;
+                ACTS_VERBOSE(
+                    "TP[apex] apex INSIDE shell of "
+                    << state.navigation.currentLayer->geometryId()
+                    << "; restart surfaceTarget");
+              } else {
+                // Apex outside currentLayer's shell (or no current layer)
+                // OR fix disabled. Full reset + layerTarget. The diagnostic
+                // latch is preserved across the resetAfterVolumeSwitch (it
+                // is cleared only by handleSurfaceReached on a recovery, or
+                // by resetAfterLayerSwitch at the next layer entry).
+                const Layer* preserveLatch = state.navigation.apexInsideLayer;
+                state.navigation.resetAfterVolumeSwitch();
+                state.navigation.apexInsideLayer = preserveLatch;
+                state.navigation.navigationStage = N::Stage::layerTarget;
+                ACTS_VERBOSE(
+                    "TP[apex] apex "
+                    << (apexInCurrentLayer ? "INSIDE (fix disabled)"
+                                           : "OUTSIDE")
+                    << " current shell; full reset, restart layerTarget");
+              }
             }
             state.stepping.turningPointDetected = false;  // Reset flag
           }
         }
-      }  
+        // Note: sensitive-surface retarget on unreachable is NOT raised here.
+        // The navigator handles it inline at navSurfaces-exhaustion time
+        // (see Navigator::nextTarget). This lets the existing list-iteration
+        // fallback try every original candidate first, and only then re-runs
+        // Layer::compatibleSurfaces from the current (closer) position when
+        // none of the original candidates produced a sensitive hit.
+      }
+
     }
 
     state.options.actorList.act(state, m_stepper, m_navigator, logger());

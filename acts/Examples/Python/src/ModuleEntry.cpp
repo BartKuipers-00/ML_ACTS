@@ -112,6 +112,26 @@ PYBIND11_MODULE(ActsPythonBindings, m) {
   m.def("trackFindingFailedCount", &Acts::detail::trackFindingFailedCount);
   m.def("trackFindingStepLimitCount",
         &Acts::detail::trackFindingStepLimitCount);
+  // Sensitive-surface retarget counters (Navigator-internal). "Invoked" =
+  // every time the navigator re-runs Layer::compatibleSurfaces because a
+  // sensitive surface returned unreachable mid-step. "Succeeded" = subset
+  // where the propagator subsequently received onSurface for a sensitive
+  // module on the same layer entry (counted at most once per layer per track).
+  m.def("fatrasRetargetInvokedCount",
+        &Acts::detail::fatrasRetargetInvokedCount);
+  m.def("fatrasRetargetSucceededCount",
+        &Acts::detail::fatrasRetargetSucceededCount);
+  m.def("ckfRetargetInvokedCount", &Acts::detail::ckfRetargetInvokedCount);
+  m.def("ckfRetargetSucceededCount",
+        &Acts::detail::ckfRetargetSucceededCount);
+  // Per-layer apex-inside-shell diagnostic. Returns a list of (vol, lay,
+  // n_inside, n_recovered) tuples — one per barrel sensor layer that fired
+  // a turning-point inside its apr=1/apr=2 shell. n_inside - n_recovered
+  // is "TP fired inside this layer's shell, but no incoming-arc sensor hit
+  // followed on the same layer".
+  m.def("apexInsideShellSnapshot", &Acts::detail::apexInsideShellSnapshot);
+  m.def("resetApexInsideShellCounts",
+        &Acts::detail::resetApexInsideShellCounts);
   m.def("resetStepLimitCounts", &Acts::detail::resetStepLimitCounts);
 
   addContext(ctx);

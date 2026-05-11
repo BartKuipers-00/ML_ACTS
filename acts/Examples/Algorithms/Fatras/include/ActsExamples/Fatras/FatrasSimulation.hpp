@@ -88,6 +88,13 @@ class FatrasSimulation final : public IAlgorithm {
     /// when logging level is DEBUG. 0 disables periodic debug printing.
     std::uint32_t debugStepInterval = 0u;
 
+    /// Maximum number of times the navigator may re-run
+    /// Layer::compatibleSurfaces from the current position when a sensitive
+    /// surface returns unreachable mid-step. 0 disables. Resets per layer
+    /// entry. Same knob is plumbed into the CKF via
+    /// TrackFindingAlgorithm::makeTrackFinderFunction.
+    int maxSurfaceRetargets = 3;
+
     /// Expected average number of hits generated per particle.
     ///
     /// This is just a performance optimization hint and has no impact on the
