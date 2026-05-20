@@ -25,23 +25,23 @@ struct NavigationTarget {
   const Surface* surface = nullptr;
   std::uint8_t surfaceIntersectionIndex = 0;
   BoundaryTolerance boundaryTolerance = BoundaryTolerance::None();
-  /// True iff the navigator issued this target while in radial-down mode
+  /// True iff the navigator issued this target while in shell mode
   /// (trajectory descending through a sensor barrel layer's shell with no
   /// sensor hit yet). The stepper/SteppingHelper uses this to bypass the
   /// helix-plane intersect for sensitives and use a pure radial-inward
   /// line predicate instead — "just look down at the next module".
-  bool radialDownMode = false;
+  bool shellMode = false;
 
   static NavigationTarget None() { return NavigationTarget(); }
 
   NavigationTarget(const Surface& surface_,
                    std::uint8_t surfaceIntersectionIndex_,
                    BoundaryTolerance boundaryTolerance_,
-                   bool radialDownMode_ = false)
+                   bool shellMode_ = false)
       : surface(&surface_),
         surfaceIntersectionIndex(surfaceIntersectionIndex_),
         boundaryTolerance(boundaryTolerance_),
-        radialDownMode(radialDownMode_) {}
+        shellMode(shellMode_) {}
 
   bool isNone() const { return surface == nullptr; }
 

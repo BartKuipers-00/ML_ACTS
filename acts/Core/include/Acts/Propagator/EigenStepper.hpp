@@ -243,11 +243,11 @@ class EigenStepper {
       State& state, const Surface& surface, std::uint8_t index,
       Direction propDir, const BoundaryTolerance& boundaryTolerance,
       double surfaceTolerance, ConstrainedStep::Type stype, bool isInBarrelVolume,
-      bool radialDownMode = false,
+      bool shellMode = false,
       const Logger& logger = getDummyLogger()) const {
     return detail::updateSingleSurfaceStatus<EigenStepper>(
         *this, state, surface, index, propDir, boundaryTolerance,
-        surfaceTolerance, stype, isInBarrelVolume, radialDownMode, logger);
+        surfaceTolerance, stype, isInBarrelVolume, shellMode, logger);
   }
 
   /// Update step size

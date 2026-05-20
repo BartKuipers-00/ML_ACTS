@@ -85,18 +85,18 @@ struct NavigationOptions {
   /// the raw tangent to compute the helix center correctly.
   Vector3 helixDirection = Vector3::Zero();
 
-  /// Radial-down per-step targeting mode for the inward barrel shell.
+  /// Shell per-step targeting mode for the inward barrel shell.
   /// Set by the navigator when the trajectory is descending through a
   /// sensor barrel layer's shell and has not yet hit a sensor on this
   /// layer entry. When true, Layer::compatibleSurfaces does a single bin
-  /// lookup at the radial-down projection (current phi/z mapped to the
+  /// lookup at the shell projection (current phi/z mapped to the
   /// layer's mean r) and returns ONLY those sensors (no approach
   /// surfaces). The navigator then re-queries every retarget (small step
   /// past the targeted sensor's radial distance). This recovers the
   /// missing-incoming-arc hits that the standard bin-lookup-once
   /// approach loses because the single entry-position bin lookup is
   /// stale by the time the trajectory has stepped through the shell.
-  bool radialDownMode = false;
+  bool shellMode = false;
 };
 
 /// @brief Steers the propagation through the geometry by providing the next
@@ -539,7 +539,7 @@ class Navigator {
           return NavigationTarget(state.navSurface().surface(),
                                   state.navSurface().index(),
                                   state.navSurface().boundaryTolerance(),
-                                  checkRadialDownActive(state, position));
+                                  checkShellActive(state, position));
         }
 
         // navSurfaces list exhausted (the existing maxTargetSkipping
@@ -553,29 +553,30 @@ class Navigator {
         const bool layerHasSensors =
             state.currentLayer != nullptr &&
             state.currentLayer->surfaceArray() != nullptr;
-        // Radial-down mode check: when the trajectory is in the inward
+        // Shell mode check: when the trajectory is in the inward
         // barrel shell with no sensor hit yet, we want to retarget at
-        // every step (each step lands in a new bin) — bypass the normal
-        // 3-retarget budget. The standard budget still applies outside
-        // radial-down mode.
-        const bool radialDownActive = checkRadialDownActive(state, position);
-        const bool budgetOk = radialDownActive ||
-                              state.surfaceRetargetRemaining > 0;
-        // Bypass the !sensitiveHitOnLayer gate when in radial-down mode.
-        // For miss_in tracks the outgoing arc set the latch; we still need
-        // to retarget on the incoming arc to find the incoming-arc sensor.
-        const bool hitGateOk = radialDownActive || !state.sensitiveHitOnLayer;
+        // every step (each step lands in a new bin).
+        //
+        // Standard retarget policy applied to both shell-mode and non-shell
+        // mode: bounded by the configured budget (maxSurfaceRetargets) and
+        // blocked after a sensor hit on this layer. The shell-mode bypass
+        // that previously allowed unlimited retargets and ignored the
+        // sensitive-hit gate has been removed — the CLOSE-HANDOFF event
+        // already triggers exactly one retarget (the close-zone neighbors
+        // lookup) before any hit, and subsequent retargets at positions
+        // past r_ideal can land on wrong-side / next-loop helix solutions.
+        // If a single close-zone retarget yields no usable sensors, the
+        // navigator falls through to layerTarget (next layer).
+        const bool budgetOk = state.surfaceRetargetRemaining > 0;
+        const bool hitGateOk = !state.sensitiveHitOnLayer;
         if (hitGateOk && layerHasSensors && budgetOk) {
-          if (!radialDownActive) {
-            --state.surfaceRetargetRemaining;
-          }
+          --state.surfaceRetargetRemaining;
           state.retargetInvokedSinceLayerEntry = true;
           incrementRetargetInvoked(m_cfg.propagationContext);
           ++state.statistics.nSensitiveRetargets;
           ACTS_VERBOSE(volInfo(state)
                        << "navSurfaces exhausted with no sensitive hit; "
-                          "retarget triggered (radialDown="
-                       << radialDownActive << " budget remaining="
+                          "retarget triggered (budget remaining="
                        << state.surfaceRetargetRemaining << ")");
           state.navSurfaces.clear();
           state.navSurfaceIndex.reset();
@@ -588,7 +589,7 @@ class Navigator {
             return NavigationTarget(state.navSurface().surface(),
                                     state.navSurface().index(),
                                     state.navSurface().boundaryTolerance(),
-                                    checkRadialDownActive(state, position));
+                                    checkShellActive(state, position));
           }
           // Re-resolution returned an empty list — fall through to layerTarget.
         }
@@ -848,22 +849,28 @@ class Navigator {
   }
 
  private:
-  /// @brief Check radial-down mode trigger conditions.
+  /// @brief Check shell mode trigger conditions.
   ///
   /// Returns true if the trajectory is currently in the inward barrel
   /// shell with no sensor hit yet (matches the conditions set in
   /// resolveSurfaces, but evaluable without re-running it). Used by
   /// nextTarget's retarget block to bypass the per-layer retarget budget
-  /// in radial-down mode: each step lands in a new bin and we want a
+  /// in shell mode: each step lands in a new bin and we want a
   /// fresh resolve every retarget.
-  bool checkRadialDownActive(const State& state,
+  bool checkShellActive(const State& state,
                              const Vector3& position) const {
-    // Mirror the resolveSurfaces trigger: gated on apexInsideLayer latch.
-    // No isInBarrelVolume check — stale after TP-fix surfaceTarget restart.
-    if (!state.radiallyInward ||
-        state.currentLayer == nullptr ||
-        state.currentLayer->surfaceArray() == nullptr ||
-        state.apexInsideLayer != state.currentLayer) {
+    // Radial-mode activates inside a barrel layer's shell (between apr=1
+    // and apr=2) for BOTH directions of motion. Must mirror the gate in
+    // resolveSurfaces exactly so the NavigationTarget's shellMode flag
+    // is consistent with Layer::compatibleSurfaces' shellMode.
+    //   inward at apr=2: rxy ≈ aprMax, going down toward r_ideal → activate
+    //     Exclude band [aprMin, aprMin + safetyMargin] — about to exit apr=1
+    //   outward at apr=1: rxy ≈ aprMin, going up toward r_ideal → activate
+    //     Exclude band [aprMax - safetyMargin, aprMax] — about to exit apr=2
+    // Pure outward navigation BETWEEN layers (rxy > aprMax of current layer)
+    // is NOT radial-mode — keeps the existing straight-line approximation.
+    if (state.currentLayer == nullptr ||
+        state.currentLayer->surfaceArray() == nullptr) {
       return false;
     }
     const auto* ad = state.currentLayer->approachDescriptor();
@@ -880,10 +887,17 @@ class Navigator {
       }
     }
     if (!(aprMin < aprMax)) return false;
-    constexpr double kApr1SafetyMargin = 3.0;
+    constexpr double kAprSafetyMargin = 3.0;
+    constexpr double kAprTol = 0.5;
     const double rxy = std::sqrt(position[0] * position[0] +
                                  position[1] * position[1]);
-    return rxy < aprMax && rxy > aprMin + kApr1SafetyMargin;
+    const bool inwardOK = state.radiallyInward &&
+                          rxy < aprMax + kAprTol &&
+                          rxy > aprMin + kAprSafetyMargin;
+    const bool outwardOK = !state.radiallyInward &&
+                           rxy > aprMin - kAprTol &&
+                           rxy < aprMax - kAprSafetyMargin;
+    return inwardOK || outwardOK;
   }
 
   /// @brief Resolve compatible surfaces
@@ -925,25 +939,32 @@ class Navigator {
       // line-everywhere baseline (matches the SteppingHelper switch).
       static const bool helixDisabled =
           std::getenv("ACTS_DISABLE_HELIX_INTERSECT") != nullptr;
-      // Forward helix info for ALL barrel motion (both inward and outward).
-      // The closed-form helix-plane intersect is direction-agnostic; using
-      // it on outward sensors too mitigates the symmetric apex-inside-shell
-      // miss-out failure mode (trajectory loses outgoing-arc hit when its
-      // line-tangent arc-length to the sensor is wrong while the helix
-      // arc-length is correct).
-      if (state.isInBarrelVolume && !helixDisabled) {
+      // Forward helix info for compatibleSurfaces unconditionally (unless
+      // the env override disables helix). The closed-form helix-plane
+      // intersect is direction-agnostic and self-validating: it checks
+      // axial-B and barrel-orientation preconditions internally and
+      // falls back if they fail. We must NOT gate on
+      // state.isInBarrelVolume here — that flag is set only in
+      // computeEffectiveDirection (called from compatibleLayers) and
+      // is stale after a TP-fix surfaceTarget restart, which would
+      // leave navOpts.helix* unset (defaulting to qOverP=0, B=0) and
+      // cause helixPlaneIntersection to silently return invalid for
+      // every sensor candidate (V13L6 apex-inside-shell case in v13:
+      // 9 sensors, all path=inf isValid=0 because the helix call
+      // received zero qOverP).
+      if (!helixDisabled) {
         navOpts.helixQOverP = state.currentQOverP;
         navOpts.helixBField = state.currentBField;
         navOpts.helixDirection = direction;
       }
 
-      // Radial-down per-step targeting mode for the inward barrel shell.
+      // Shell per-step targeting mode for the inward barrel shell.
       // Gate on apexInsideLayer == currentLayer: this latch is set by the
       // turning-point block when the apex fires INSIDE the current layer's
       // shell, and is cleared on layer/volume switch or successful sensor
-      // hit on the same layer. This restricts radial-down to the actual
+      // hit on the same layer. This restricts shell to the actual
       // apex-inside-shell failure mode it was designed for; without this
-      // gate, radial-down activates for every inward sensor layer
+      // gate, shell activates for every inward sensor layer
       // traversal post-apex, where the helix-arc step-size override
       // overshoots into the next layer and breaks normal navigation
       // (v5 regression: −30k complete hits across V8L*/V13L*).
@@ -952,9 +973,24 @@ class Navigator {
       // a TP-fix surfaceTarget restart it can be stale. The geometric
       // check (apexInsideLayer == currentLayer with sensor array) is the
       // authoritative one.
-      if (state.radiallyInward &&
-          state.apexInsideLayer == currentLayer &&
-          currentLayer->surfaceArray() != nullptr) {
+      // SANITY-CHECK MODE: dropped apexInsideLayer gate. Shell
+      // activates for any radially-inward motion in a barrel layer with
+      // a sensor array. The d-3 FAR + bisector CLOSE strategy applies
+      // to all inward sensor traversals, not only apex-inside-shell.
+      {
+        const double dbgRxy = std::sqrt(position[0] * position[0] +
+                                        position[1] * position[1]);
+        ACTS_VERBOSE(
+            volInfo(state)
+            << "[shell-gate] radiallyInward="
+            << state.radiallyInward << " currentLayer="
+            << (currentLayer ? currentLayer->geometryId()
+                             : Acts::GeometryIdentifier{})
+            << " hasSurfaceArray="
+            << (currentLayer && currentLayer->surfaceArray() != nullptr)
+            << " rxy=" << dbgRxy);
+      }
+      if (currentLayer->surfaceArray() != nullptr) {
         const double rxy = std::sqrt(position[0] * position[0] +
                                      position[1] * position[1]);
         // Find apr=1 r and apr=2 r from the layer's approach descriptor.
@@ -972,12 +1008,36 @@ class Navigator {
             }
           }
         }
-        constexpr double kApr1SafetyMargin = 3.0;  // mm
-        if (aprMin < aprMax && rxy < aprMax &&
-            rxy > aprMin + kApr1SafetyMargin) {
-          navOpts.radialDownMode = true;
+        constexpr double kAprSafetyMargin = 3.0;  // mm
+        constexpr double kAprTol = 0.5;  // mm
+        // Symmetric activation: radial-mode targets r_ideal (the layer's
+        // representing-surface cylinder, mid-shell) from EITHER side.
+        //
+        //   inward at apr=2: rxy ≈ aprMax, going down → activate.
+        //     Exclude band [aprMin, aprMin + safetyMargin] — trajectory
+        //     about to exit the shell through apr=1; no useful FAR step
+        //     toward r_ideal.
+        //   outward at apr=1: rxy ≈ aprMin, going up → activate.
+        //     Exclude band [aprMax - safetyMargin, aprMax] — trajectory
+        //     about to exit the shell through apr=2.
+        //
+        // Note: state.radiallyInward is the propagator-tracked direction.
+        // No additional check on |pr| is needed here — Layer.cpp and
+        // SteppingHelper re-evaluate the direction-aware "headed toward
+        // r_ideal" condition per step from the current position+direction,
+        // so a stale state.radiallyInward (e.g. just after a TP restart)
+        // is benign: those code paths will fall to CLOSE phase if pr
+        // disagrees with the side of r_ideal.
+        const bool inwardOK = state.radiallyInward &&
+                              rxy < aprMax + kAprTol &&
+                              rxy > aprMin + kAprSafetyMargin;
+        const bool outwardOK = !state.radiallyInward &&
+                               rxy > aprMin - kAprTol &&
+                               rxy < aprMax - kAprSafetyMargin;
+        if (aprMin < aprMax && (inwardOK || outwardOK)) {
+          navOpts.shellMode = true;
           ACTS_VERBOSE(volInfo(state)
-                       << "Radial-down mode active: layer "
+                       << "Shell mode active: layer "
                        << currentLayer->geometryId() << " apr=[" << aprMin
                        << ", " << aprMax << "] rxy=" << rxy);
         }

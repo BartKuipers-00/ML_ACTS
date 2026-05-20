@@ -60,7 +60,7 @@ SurfaceIntersection helixPlaneIntersection(
 /// extrapolation predicts.
 /// @param arcLength  if non-null, set to the helix arc length from `position`
 ///                   to `landing` on success. (Used by the stepper in
-///                   radial-down mode to size the step along the helix
+///                   shell mode to size the step along the helix
 ///                   instead of along the tiny radial chord to a sensor's
 ///                   plane.)
 bool helixBarrelCylinderLanding(const Vector3& position,

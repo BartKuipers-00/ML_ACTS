@@ -216,11 +216,11 @@ class SympyStepper {
       State& state, const Surface& surface, std::uint8_t index,
       Direction navDir, const BoundaryTolerance& boundaryTolerance,
       double surfaceTolerance, ConstrainedStep::Type stype, bool isInBarrelVolume,
-      bool radialDownMode = false,
+      bool shellMode = false,
       const Logger& logger = getDummyLogger()) const {
     return detail::updateSingleSurfaceStatus<SympyStepper>(
         *this, state, surface, index, navDir, boundaryTolerance,
-        surfaceTolerance, stype, isInBarrelVolume, radialDownMode, logger);
+        surfaceTolerance, stype, isInBarrelVolume, shellMode, logger);
   }
 
   /// Update step size
