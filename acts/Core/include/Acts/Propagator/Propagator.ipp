@@ -61,7 +61,7 @@ Acts::Result<void> Acts::Propagator<S, N>::propagate(
           nextTarget.surfaceIntersectionIndex, state.options.direction,
           nextTarget.boundaryTolerance, state.options.surfaceTolerance,
           ConstrainedStep::Type::Navigator, state.navigation.isInBarrelVolume,
-          nextTarget.shellMode, logger());
+          logger());
       if (preStepSurfaceStatus == IntersectionStatus::onSurface) {
         // This indicates a geometry overlap which is not handled by the
         // navigator, so we skip this target.
@@ -149,7 +149,7 @@ Acts::Result<void> Acts::Propagator<S, N>::propagate(
           nextTarget.surfaceIntersectionIndex, state.options.direction,
           nextTarget.boundaryTolerance, state.options.surfaceTolerance,
           ConstrainedStep::Type::Navigator, state.navigation.isInBarrelVolume,
-          nextTarget.shellMode, logger());
+          logger());
       if (postStepSurfaceStatus == IntersectionStatus::onSurface) {
         m_navigator.handleSurfaceReached(state.navigation, state.position,
                                          state.direction, *nextTarget.surface);
@@ -259,32 +259,14 @@ Acts::Result<void> Acts::Propagator<S, N>::propagate(
                 }
               }
 
-              // Diagnostic: latch + bump per-layer counter when apex is
-              // inside a sensor layer's shell. The latch in Navigator::State
-              // triggers the recovered-counter bump on the next sensor hit
-              // on the same layer; the not-recovered count is implicit
-              // (inside - recovered) when the layer is exited or the
-              // trajectory ends.
-              if (apexInCurrentLayer) {
-                const auto layerGeo =
-                    state.navigation.currentLayer
-                        ->surfaceRepresentation()
-                        .geometryId();
-                Acts::detail::bumpApexInsideShell(
-                    static_cast<std::uint32_t>(layerGeo.volume()),
-                    static_cast<std::uint32_t>(layerGeo.layer()));
-                state.navigation.apexInsideLayer =
-                    state.navigation.currentLayer;
-              }
-
               // Env-gate the surfaceTarget fix so we can A/B with vs without.
-              // ACTS_DISABLE_TP_INSIDE_SHELL_FIX=1 → always full reset +
+              // ACTS_DISABLE_TP_INSIDE_LAYER_FIX=1 → always full reset +
               // layerTarget (the natural-baseline behaviour, used to measure
               // the un-fixed failure mode).
-              static const bool tpInsideShellFixDisabled =
-                  std::getenv("ACTS_DISABLE_TP_INSIDE_SHELL_FIX") != nullptr;
+              static const bool tpInsideLayerFixDisabled =
+                  std::getenv("ACTS_DISABLE_TP_INSIDE_LAYER_FIX") != nullptr;
 
-              if (apexInCurrentLayer && !tpInsideShellFixDisabled) {
+              if (apexInCurrentLayer && !tpInsideLayerFixDisabled) {
                 state.navigation.navSurfaces.clear();
                 state.navigation.navSurfaceIndex.reset();
                 state.navigation.navLayers.clear();
@@ -293,24 +275,19 @@ Acts::Result<void> Acts::Propagator<S, N>::propagate(
                 state.navigation.navBoundaryIndex.reset();
                 state.navigation.navigationStage = N::Stage::surfaceTarget;
                 ACTS_VERBOSE(
-                    "TP[apex] apex INSIDE shell of "
+                    "TP[apex] apex INSIDE layer "
                     << state.navigation.currentLayer->geometryId()
                     << "; restart surfaceTarget");
               } else {
-                // Apex outside currentLayer's shell (or no current layer)
-                // OR fix disabled. Full reset + layerTarget. The diagnostic
-                // latch is preserved across the resetAfterVolumeSwitch (it
-                // is cleared only by handleSurfaceReached on a recovery, or
-                // by resetAfterLayerSwitch at the next layer entry).
-                const Layer* preserveLatch = state.navigation.apexInsideLayer;
+                // Apex outside currentLayer (or no current layer / fix
+                // disabled). Full reset + layerTarget.
                 state.navigation.resetAfterVolumeSwitch();
-                state.navigation.apexInsideLayer = preserveLatch;
                 state.navigation.navigationStage = N::Stage::layerTarget;
                 ACTS_VERBOSE(
                     "TP[apex] apex "
                     << (apexInCurrentLayer ? "INSIDE (fix disabled)"
                                            : "OUTSIDE")
-                    << " current shell; full reset, restart layerTarget");
+                    << " current layer; full reset, restart layerTarget");
               }
             }
             state.stepping.turningPointDetected = false;  // Reset flag

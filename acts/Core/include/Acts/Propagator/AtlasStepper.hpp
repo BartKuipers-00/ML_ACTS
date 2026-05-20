@@ -416,11 +416,10 @@ class AtlasStepper {
       State& state, const Surface& surface, std::uint8_t index,
       Direction navDir, const BoundaryTolerance& boundaryTolerance,
       double surfaceTolerance, ConstrainedStep::Type stype, bool isInBarrelVolume,
-      bool shellMode = false,
       const Logger& logger = getDummyLogger()) const {
     return detail::updateSingleSurfaceStatus<AtlasStepper>(
         *this, state, surface, index, navDir, boundaryTolerance,
-        surfaceTolerance, stype, isInBarrelVolume, shellMode, logger);
+        surfaceTolerance, stype, isInBarrelVolume, logger);
   }
 
   /// Update step size

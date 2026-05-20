@@ -176,9 +176,6 @@ def runPerfectSpacepointsMultiGen(
     if pMin is not None:
         pMin = pMin * u.GeV
 
-    nav_cfg = config.get("navigation", {})
-    max_surface_retargets = int(nav_cfg.get("max_surface_retargets", 3))
-
     addFatras(
         s,
         trackingGeometry,
@@ -189,7 +186,6 @@ def runPerfectSpacepointsMultiGen(
         maxSteps=sim.get("maxSteps", None),
         loopFraction=sim.get("loopFraction", None),
         debugStepInterval=logging_cfg.get("n", None),
-        maxSurfaceRetargets=max_surface_retargets,
         outputDirRoot=outputDir,
     )
 
@@ -466,7 +462,6 @@ def runPerfectSpacepointsMultiGen(
             trackingGeometry,
             field,
             customLogLevel(),
-            maxSurfaceRetargets=max_surface_retargets,
         ),
         **acts.examples.defaultKWArgs(
             trackingGeometry=trackingGeometry,

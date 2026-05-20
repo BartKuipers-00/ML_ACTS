@@ -40,7 +40,7 @@ void addExampleAlgorithms(Context& ctx) {
     emEnergyLossRadiation, emPhotonConversion, generateHitsOnSensitive,
     generateHitsOnMaterial, generateHitsOnPassive,
     /* propagation tuning */ maxSteps, loopProtection, loopFraction,
-    averageHitsPerParticle, debugStepInterval, maxSurfaceRetargets);
+    averageHitsPerParticle, debugStepInterval);
 
   ACTS_PYTHON_DECLARE_ALGORITHM(ActsExamples::ParticlesPrinter, mex,
                                 "ParticlesPrinter", inputParticles);

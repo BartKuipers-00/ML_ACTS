@@ -1,6 +1,6 @@
 {
   "simulation": {
-    "events": 500,
+    "events": 1000,
     "numThreads": 1,
     "randomSeed": 42,
     "maxSteps": 10000,
@@ -50,7 +50,6 @@
     "selectorConfig": {"pt": {"min": 0.1, "max": null}, "absEta": {"min": null, "max": 4.0}, "loc0": {"min": -4.0, "max": 4.0}, "nMeasurementsMin": 5, "maxHoles": 3, "maxOutliers": 2},
     "ckfConfig": {"chi2CutOffMeasurement": 15.0, "chi2CutOffOutlier": 25.0, "numMeasurementsCutOff": 1, "maxSteps": 100000, "seedDeduplication": true, "stayOnSeed": true}
   },
-  "navigation": {"max_surface_retargets": 1},
   "matchingFractionThreshold": 0.7,
   "output": {"outputCsv": false, "writeTrackStates": true, "csvSubdir": "csv"},
   "logging": {"level": "INFO", "n": 0}

@@ -75,7 +75,7 @@ class TrackFindingAlgorithm final : public IAlgorithm {
   static std::shared_ptr<TrackFinderFunction> makeTrackFinderFunction(
       std::shared_ptr<const Acts::TrackingGeometry> trackingGeometry,
       std::shared_ptr<const Acts::MagneticFieldProvider> magneticField,
-      const Acts::Logger& logger, int maxSurfaceRetargets = 3);
+      const Acts::Logger& logger);
 
   struct Config {
     /// Input measurements collection.

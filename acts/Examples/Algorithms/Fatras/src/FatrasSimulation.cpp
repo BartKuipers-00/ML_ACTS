@@ -119,13 +119,7 @@ struct FatrasSimulationT final : ActsExamples::detail::FatrasSimulation {
                 ChargedPropagator(
                     ChargedStepper(cfg.magneticField),
                     Acts::Navigator(
-                        [&]() {
-                          Acts::Navigator::Config nc{cfg.trackingGeometry};
-                          nc.maxSurfaceRetargets = cfg.maxSurfaceRetargets;
-                          nc.propagationContext = Acts::Navigator::Config::
-                              PropagationContext::Fatras;
-                          return nc;
-                        }(),
+                        Acts::Navigator::Config{cfg.trackingGeometry},
                         Acts::getDefaultLogger("SimNav", lvl)),
                     Acts::getDefaultLogger("SimProp", lvl)),
                 Acts::getDefaultLogger("Simulation", lvl)),
@@ -133,13 +127,7 @@ struct FatrasSimulationT final : ActsExamples::detail::FatrasSimulation {
                 NeutralPropagator(
                     NeutralStepper(),
                     Acts::Navigator(
-                        [&]() {
-                          Acts::Navigator::Config nc{cfg.trackingGeometry};
-                          nc.maxSurfaceRetargets = cfg.maxSurfaceRetargets;
-                          nc.propagationContext = Acts::Navigator::Config::
-                              PropagationContext::Fatras;
-                          return nc;
-                        }(),
+                        Acts::Navigator::Config{cfg.trackingGeometry},
                         Acts::getDefaultLogger("SimNav", lvl)),
                     Acts::getDefaultLogger("SimProp", lvl)),
                 Acts::getDefaultLogger("Simulation", lvl))) {

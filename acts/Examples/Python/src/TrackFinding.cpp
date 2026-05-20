@@ -228,15 +228,13 @@ void addTrackFinding(Context& ctx) {
                        trackingGeometry,
                    std::shared_ptr<const Acts::MagneticFieldProvider>
                        magneticField,
-                   Logging::Level level, int maxSurfaceRetargets) {
+                   Logging::Level level) {
                   return Alg::makeTrackFinderFunction(
                       std::move(trackingGeometry), std::move(magneticField),
-                      *Acts::getDefaultLogger("TrackFinding", level),
-                      maxSurfaceRetargets);
+                      *Acts::getDefaultLogger("TrackFinding", level));
                 },
                 py::arg("trackingGeometry"), py::arg("magneticField"),
-                py::arg("level"),
-                py::arg("maxSurfaceRetargets") = 3);
+                py::arg("level"));
 
     py::class_<Alg::TrackFinderFunction,
                std::shared_ptr<Alg::TrackFinderFunction>>(
