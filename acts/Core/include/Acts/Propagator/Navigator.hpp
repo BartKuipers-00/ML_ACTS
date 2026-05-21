@@ -752,12 +752,8 @@ class Navigator {
         auto layerId = layerSurface->geometryId().layer();
         auto externalSurfaceRange =
             state.options.externalSurfaces.equal_range(layerId);
-        navOpts.externalSurfaces.reserve(
-            state.options.externalSurfaces.count(layerId));
-        for (auto itSurface = externalSurfaceRange.first;
-             itSurface != externalSurfaceRange.second; itSurface++) {
-          navOpts.externalSurfaces.push_back(itSurface->second);
-        }
+
+          }
       }
       // Pass the RAW stepper direction (no bisector substitution). The
       // bisector heuristic was masking inconsistent path-length predictions
