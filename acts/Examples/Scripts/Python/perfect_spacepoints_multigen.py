@@ -114,7 +114,11 @@ def runPerfectSpacepointsMultiGen(
 
     vtxGen = acts.examples.GaussianVertexGenerator(
         mean=acts.Vector4(0, 0, 0, 0),
-        stddev=acts.Vector4(0, 0, 0, 0),
+        # Beam-spot smearing: 12.5 um transverse, 55.5 mm along z,
+        # 1.0 ns in time (ACTS full-chain signal-vertex luminous region).
+        stddev=acts.Vector4(
+            0.0125 * u.mm, 0.0125 * u.mm, 55.5 * u.mm, 1.0 * u.ns
+        ),
     )
 
     evGen = acts.examples.EventGenerator(

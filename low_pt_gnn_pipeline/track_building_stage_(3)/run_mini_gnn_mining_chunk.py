@@ -28,10 +28,13 @@ sys.path.insert(0, str(WORKSPACE_ROOT / "acorn"))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.utils.loading_utils import load_datafiles_in_dir
-from low_pt_custom_utils.segment_matching import extract_segments_from_cc
+from low_pt_custom_utils.segment_matching import (
+    extract_segments_from_cc,
+    extract_segments_from_ground_truth,
+)
 from low_pt_custom_utils.mini_gnn_segment_embedding import (
     segment_to_pyg,
-    get_segment_particle_id,
+    filter_paired_segments,
 )
 
 
@@ -51,7 +54,7 @@ def get_chunk_paths(all_paths, chunk, total_chunks):
     return all_paths[start:end]
 
 
-def mine_paths(paths, score_cut, node_scales, output_dir, label=""):
+def mine_paths(paths, score_cut, use_ground_truth, node_scales, output_dir, label=""):
     """Process events and save precomputed segments to output_dir."""
     output_dir.mkdir(parents=True, exist_ok=True)
     total_segs = 0
@@ -60,15 +63,14 @@ def mine_paths(paths, score_cut, node_scales, output_dir, label=""):
     pbar = tqdm(paths, desc=f"  Mining {label}", unit="ev")
     for event_path in pbar:
         graph = torch.load(event_path, map_location="cpu", weights_only=False)
-        segments = extract_segments_from_cc(graph, score_cut)
+        if use_ground_truth:
+            segments = extract_segments_from_ground_truth(graph)
+        else:
+            segments = extract_segments_from_cc(graph, score_cut)
 
-        seg_data_list = []
-        particle_ids = []
-        for seg in (segments or []):
-            if len(seg.hits) == 0:
-                continue
-            seg_data_list.append(segment_to_pyg(seg, graph, node_scales=node_scales))
-            particle_ids.append(get_segment_particle_id(seg, graph))
+        # Pairs-only + min-hits >=2 filter (see mini_gnn_data_mining.py docstring)
+        kept_segs, particle_ids = filter_paired_segments(segments or [], graph, min_hits=2)
+        seg_data_list = [segment_to_pyg(seg, graph, node_scales=node_scales) for seg in kept_segs]
 
         if len(seg_data_list) < 2:
             skipped += 1
@@ -109,7 +111,7 @@ def main():
     print(f"Node:   {__import__('socket').gethostname()}")
     print()
 
-    input_dir = Path(config.get("input_dir", "data/gnn_stage"))
+    input_dir = Path(config["input_dir"])
     if not input_dir.is_absolute():
         input_dir = PIPELINE_ROOT / input_dir
 
@@ -118,9 +120,11 @@ def main():
     print(f"Output: {chunk_output_dir}")
     print()
 
-    score_cut = config.get("score_cut", 0.85)
-    node_scales = config.get("node_scales", [1000.0, 1000.0, 500.0, 1000.0])
-    data_split = config.get("data_split", [30000, 900, 900])
+    score_cut = config["score_cut"]
+    use_ground_truth = config["use_ground_truth"]
+    node_scales = config["node_scales"]
+    data_split = config["data_split"]
+    print(f"GroundTruth: {use_ground_truth}")
 
     splits = [("trainset", data_split[0]), ("valset", data_split[1])]
     if len(data_split) > 2 and data_split[2] > 0:
@@ -139,7 +143,7 @@ def main():
         if not chunk_paths:
             continue
 
-        mine_paths(chunk_paths, score_cut, node_scales,
+        mine_paths(chunk_paths, score_cut, use_ground_truth, node_scales,
                    chunk_output_dir / split_name, label=split_name)
         print()
 

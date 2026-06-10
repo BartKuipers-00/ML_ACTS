@@ -164,6 +164,48 @@ def segment_to_pyg(seg, graph, node_scales=(1000.0, 1000.0, 500.0, 1000.0)) -> D
     return Data(x=node_feats, edge_index=edge_index)
 
 
+def build_segment_batch(segments, graph, node_scales=(1000.0, 1000.0, 500.0, 1000.0)):
+    """
+    Vectorized batched miniGNN input for many segments at once.
+
+    Equivalent to Batch.from_data_list([segment_to_pyg(s, graph) ...]) but built in
+    a few tensor ops instead of one PyG Data per segment. Returns (x, edge_index,
+    batch) with block-diagonal fully-connected (i != j) edges per segment.
+    """
+    sizes = torch.tensor([len(s.hits) for s in segments], dtype=torch.long)
+    flat = []
+    for s in segments:
+        flat.extend(s.hits)
+    all_hits = torch.as_tensor(flat, dtype=torch.long)
+
+    x = torch.stack([
+        graph.hit_x[all_hits].float() / node_scales[0],
+        graph.hit_y[all_hits].float() / node_scales[1],
+        graph.hit_z[all_hits].float() / node_scales[2],
+        graph.hit_r[all_hits].float() / node_scales[3],
+    ], dim=1)
+
+    N = sizes.numel()
+    batch = torch.repeat_interleave(torch.arange(N), sizes)
+
+    # Per (i,j) slot: recover its block, within-block position p, then a=p//n, b=p%n
+    offsets = torch.cumsum(sizes, 0) - sizes
+    n_sq = sizes * sizes
+    total = int(n_sq.sum())
+    if total == 0:
+        return x, torch.zeros((2, 0), dtype=torch.long), batch
+    elem_block = torch.repeat_interleave(torch.arange(N), n_sq)
+    sq_starts = torch.cumsum(n_sq, 0) - n_sq
+    p = torch.arange(total) - sq_starts[elem_block]
+    n_per = sizes[elem_block]
+    off_per = offsets[elem_block]
+    a = p // n_per
+    b = p % n_per
+    mask = a != b
+    edge_index = torch.stack([off_per[mask] + a[mask], off_per[mask] + b[mask]])
+    return x, edge_index, batch
+
+
 def get_segment_particle_id(seg, graph) -> int:
     """
     Return the majority hit_particle_id for a segment, excluding noise (pid=0).
@@ -177,6 +219,37 @@ def get_segment_particle_id(seg, graph) -> int:
         return 0
     values, counts = np.unique(signal_pids, return_counts=True)
     return int(values[np.argmax(counts)])
+
+
+def filter_paired_segments(segments, graph, min_hits=2):
+    """
+    Pairs-only + min-hits filter, applied jointly.
+
+    Keep a segment iff it has >= min_hits hits AND its particle has >= 2 such
+    (>= min_hits-hit) segments. The hit cut is applied first so that dropping a
+    short arc never orphans its multi-hit partner; particles left with fewer
+    than 2 qualifying segments (and all noise, pid=0) are dropped entirely.
+
+    Returns parallel lists (kept_segments, kept_particle_ids).
+    """
+    candidates = [
+        (seg, get_segment_particle_id(seg, graph))
+        for seg in segments
+        if len(seg.hits) >= min_hits
+    ]
+
+    counts = {}
+    for _seg, pid in candidates:
+        if pid > 0:
+            counts[pid] = counts.get(pid, 0) + 1
+
+    kept_segments, kept_pids = [], []
+    for seg, pid in candidates:
+        if pid > 0 and counts[pid] >= 2:
+            kept_segments.append(seg)
+            kept_pids.append(pid)
+
+    return kept_segments, kept_pids
 
 
 # ─── Contrastive Loss ────────────────────────────────────────────────────────

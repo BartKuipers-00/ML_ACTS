@@ -122,6 +122,33 @@ def build_edges(
     return edge_list
 
 
+def edge_truth_labels(
+    pred_edges: torch.Tensor,
+    true_edges: torch.Tensor,
+    num_nodes: int,
+    undirected: bool = False,
+) -> tuple:
+    """
+    Fast drop-in for acorn's graph_intersection(unique_pred=False, return_y_pred=True): dedup
+    predicted edges + label vs true_edges via int64 keys (src*N+dst). Identical result, no unique(dim=1).
+
+    Returns:
+        pred_edges_unique: directed-unique predicted edges (lexicographically sorted columns).
+        edge_y:            bool tensor, True where the predicted edge matches a true edge
+                           (either direction if undirected).
+    """
+    N = int(num_nodes)
+    pk = pred_edges[0].long() * N + pred_edges[1].long()
+    pk_u = torch.unique(pk)                                  # fast 1D unique, sorted
+    pred_u = torch.stack([pk_u // N, pk_u % N])
+    if undirected:
+        key = lambda e: torch.minimum(e[0], e[1]).long() * N + torch.maximum(e[0], e[1]).long()
+    else:
+        key = lambda e: e[0].long() * N + e[1].long()
+    edge_y = torch.isin(key(pred_u), torch.unique(key(true_edges)))
+    return pred_u, edge_y
+
+
 def patch_acorn_build_edges():
     """
     Monkey-patch acorn's metric_learning module to use this build_edges.

@@ -21,10 +21,11 @@ precomputed_dir: data/track_building/mini_gnn_segments
 
 score_cut: 0.4         # Edge score threshold for CC clustering
 use_wrangler: true       # Match inference pipeline (CC + wrangler disentanglement)
+use_ground_truth: false  # use GNN-inferred CC segments (not perfect GT segments)
 
 # ============================================================================
 # NODE FEATURES
 # ============================================================================
 
 # Normalization scales for hit features: [x, y, z, r]
-node_scales: [1000.0, 1000.0, 500.0, 1000.0]
+node_scales: [1000.0, 1000.0, 1200.0, 1000.0]

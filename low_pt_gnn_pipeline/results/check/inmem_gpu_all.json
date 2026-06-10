@@ -1,0 +1,592 @@
+{
+  "meta": {
+    "device": "cuda",
+    "gpu_name": "NVIDIA L40S",
+    "host": "wn-pijl-003.nikhef.nl",
+    "cpu_threads": 8,
+    "max_events": 10,
+    "mode": "in_memory_compute_only"
+  },
+  "records": [
+    {
+      "dataset": "testset",
+      "multiplicity": 40,
+      "num_events": 10,
+      "avg_spacepoints": 428.9,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.0042334673926234245,
+          "std": 0.00041812822348286126
+        },
+        "graph": {
+          "mean": 0.006905522407032549,
+          "std": 0.0017456062301244404
+        },
+        "gnn": {
+          "mean": 0.031984586582984774,
+          "std": 0.0016881363989301277
+        },
+        "track_extract": {
+          "mean": 0.0034923628787510096,
+          "std": 0.00022673774288581224
+        },
+        "track_match": {
+          "mean": 0.01206337830517441,
+          "std": 0.01545049771912086
+        }
+      },
+      "inference_total_per_event_s": 0.05444585017394274
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 80,
+      "num_events": 10,
+      "avg_spacepoints": 869.3,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.005817186611238867,
+          "std": 0.0012005573374586616
+        },
+        "graph": {
+          "mean": 0.012015858304221184,
+          "std": 0.0028787907176781786
+        },
+        "gnn": {
+          "mean": 0.07538982972037048,
+          "std": 0.005603838976386231
+        },
+        "track_extract": {
+          "mean": 0.010387061792425812,
+          "std": 0.001307928370289184
+        },
+        "track_match": {
+          "mean": 0.014375888672657312,
+          "std": 0.001836204526790839
+        }
+      },
+      "inference_total_per_event_s": 0.11216863848967477
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 120,
+      "num_events": 10,
+      "avg_spacepoints": 1298.2,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.012170134705957025,
+          "std": 0.019902439175620564
+        },
+        "graph": {
+          "mean": 0.017521922697778792,
+          "std": 0.006612450029003264
+        },
+        "gnn": {
+          "mean": 0.1589101568912156,
+          "std": 0.011716854511813504
+        },
+        "track_extract": {
+          "mean": 0.01974928518757224,
+          "std": 0.002276109682664844
+        },
+        "track_match": {
+          "mean": 0.017080866999458523,
+          "std": 0.002170797763410737
+        }
+      },
+      "inference_total_per_event_s": 0.21326223177602516
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 160,
+      "num_events": 10,
+      "avg_spacepoints": 1746.5,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.006467824010178447,
+          "std": 0.0015646796851250114
+        },
+        "graph": {
+          "mean": 0.0177492793998681,
+          "std": 0.005772731440075769
+        },
+        "gnn": {
+          "mean": 0.2861789180082269,
+          "std": 0.016459659697435226
+        },
+        "track_extract": {
+          "mean": 0.02084688520990312,
+          "std": 0.004747296602824562
+        },
+        "track_match": {
+          "mean": 0.015638163487892598,
+          "std": 0.00219525661344649
+        }
+      },
+      "inference_total_per_event_s": 0.34041324610589074
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 200,
+      "num_events": 10,
+      "avg_spacepoints": 2140.0,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.009802780707832425,
+          "std": 0.004869786830653935
+        },
+        "graph": {
+          "mean": 0.028735105006489903,
+          "std": 0.008673233271693972
+        },
+        "gnn": {
+          "mean": 0.41731285901041704,
+          "std": 0.02090966458051539
+        },
+        "track_extract": {
+          "mean": 0.033882718498352914,
+          "std": 0.008024999320207967
+        },
+        "track_match": {
+          "mean": 0.024222063703928143,
+          "std": 0.003710049657401849
+        }
+      },
+      "inference_total_per_event_s": 0.5041527462191879
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 240,
+      "num_events": 10,
+      "avg_spacepoints": 2600.8,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.00923239648109302,
+          "std": 0.004911544475263436
+        },
+        "graph": {
+          "mean": 0.02677256379975006,
+          "std": 0.012316204151567941
+        },
+        "gnn": {
+          "mean": 0.5789951557992026,
+          "std": 0.023248171304124522
+        },
+        "track_extract": {
+          "mean": 0.02840484498301521,
+          "std": 0.00466765216192268
+        },
+        "track_match": {
+          "mean": 0.024044858210254462,
+          "std": 0.0069477518748526515
+        }
+      },
+      "inference_total_per_event_s": 0.6582174227922223
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 280,
+      "num_events": 10,
+      "avg_spacepoints": 3051.8,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.05962123930221423,
+          "std": 0.027300422277155557
+        },
+        "graph": {
+          "mean": 0.05160232782363892,
+          "std": 0.04076115018760178
+        },
+        "gnn": {
+          "mean": 0.7431516102165915,
+          "std": 0.0177606449702827
+        },
+        "track_extract": {
+          "mean": 0.04276016827207059,
+          "std": 0.010516007748177155
+        },
+        "track_match": {
+          "mean": 0.030050686409231274,
+          "std": 0.008966923302444231
+        }
+      },
+      "inference_total_per_event_s": 0.8675647927215323
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 320,
+      "num_events": 10,
+      "avg_spacepoints": 3462.6,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.010323002678342163,
+          "std": 0.004698174217692101
+        },
+        "graph": {
+          "mean": 0.027430229692254216,
+          "std": 0.007375519692836727
+        },
+        "gnn": {
+          "mean": 0.8882022561854683,
+          "std": 0.029430357636432095
+        },
+        "track_extract": {
+          "mean": 0.027967772120609878,
+          "std": 0.002191838353325519
+        },
+        "track_match": {
+          "mean": 0.019077870494220404,
+          "std": 0.002575627348113331
+        }
+      },
+      "inference_total_per_event_s": 0.9626781284925527
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 360,
+      "num_events": 10,
+      "avg_spacepoints": 3939.1,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.012982592801563442,
+          "std": 0.005884473587221935
+        },
+        "graph": {
+          "mean": 0.043545758596155795,
+          "std": 0.012980571118652223
+        },
+        "gnn": {
+          "mean": 1.0742544555687346,
+          "std": 0.06844025761794627
+        },
+        "track_extract": {
+          "mean": 0.038050223479513076,
+          "std": 0.007323972738599527
+        },
+        "track_match": {
+          "mean": 0.04180239080451429,
+          "std": 0.042804367017940624
+        }
+      },
+      "inference_total_per_event_s": 1.1976528284489176
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 400,
+      "num_events": 10,
+      "avg_spacepoints": 4327.9,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.010125144792255014,
+          "std": 0.002966517897955712
+        },
+        "graph": {
+          "mean": 0.04359359998488799,
+          "std": 0.009167431476432196
+        },
+        "gnn": {
+          "mean": 1.190621916472446,
+          "std": 0.02357910908774909
+        },
+        "track_extract": {
+          "mean": 0.04138579796999693,
+          "std": 0.00861369105112359
+        },
+        "track_match": {
+          "mean": 0.030897559830918908,
+          "std": 0.006205321405462913
+        }
+      },
+      "inference_total_per_event_s": 1.30649887425825
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 440,
+      "num_events": 10,
+      "avg_spacepoints": 4762.6,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.016197088395711035,
+          "std": 0.009611269253234954
+        },
+        "graph": {
+          "mean": 0.05269201090559363,
+          "std": 0.01531380596539545
+        },
+        "gnn": {
+          "mean": 1.3670667388825677,
+          "std": 0.07452996391947608
+        },
+        "track_extract": {
+          "mean": 0.05736941202776506,
+          "std": 0.011599197487994331
+        },
+        "track_match": {
+          "mean": 0.04195186571450904,
+          "std": 0.01172591811898991
+        }
+      },
+      "inference_total_per_event_s": 1.5190800275304355
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 480,
+      "num_events": 10,
+      "avg_spacepoints": 5230.7,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.020745432772673666,
+          "std": 0.01484878869787177
+        },
+        "graph": {
+          "mean": 0.05405077680479735,
+          "std": 0.010903794270963578
+        },
+        "gnn": {
+          "mean": 1.5023389232927002,
+          "std": 0.030160678538376635
+        },
+        "track_extract": {
+          "mean": 0.06412748920265585,
+          "std": 0.03739499347841112
+        },
+        "track_match": {
+          "mean": 0.03784074101131409,
+          "std": 0.008979047661791905
+        }
+      },
+      "inference_total_per_event_s": 1.6583579303114675
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 520,
+      "num_events": 10,
+      "avg_spacepoints": 5670.7,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.018306876195129006,
+          "std": 0.022327958349962547
+        },
+        "graph": {
+          "mean": 0.07711933898972348,
+          "std": 0.03121159988081591
+        },
+        "gnn": {
+          "mean": 1.6816154051106422,
+          "std": 0.10221624263145704
+        },
+        "track_extract": {
+          "mean": 0.07322644101222978,
+          "std": 0.004685643094007868
+        },
+        "track_match": {
+          "mean": 0.052594323293305933,
+          "std": 0.0041940636585688345
+        }
+      },
+      "inference_total_per_event_s": 1.8845555084059016
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 560,
+      "num_events": 10,
+      "avg_spacepoints": 6106.4,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.01684378689387813,
+          "std": 0.007234966159541968
+        },
+        "graph": {
+          "mean": 0.06710806720657274,
+          "std": 0.013430077922128499
+        },
+        "gnn": {
+          "mean": 1.8267489810707047,
+          "std": 0.017065246312218584
+        },
+        "track_extract": {
+          "mean": 0.07794142561033368,
+          "std": 0.0036567034584494905
+        },
+        "track_match": {
+          "mean": 0.05577280931174755,
+          "std": 0.0034707395407750346
+        }
+      },
+      "inference_total_per_event_s": 2.0275712831993586
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 600,
+      "num_events": 10,
+      "avg_spacepoints": 6565.6,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.016664568707346915,
+          "std": 0.0050115436811181855
+        },
+        "graph": {
+          "mean": 0.06960098922718316,
+          "std": 0.01631408707541563
+        },
+        "gnn": {
+          "mean": 2.0038202445954085,
+          "std": 0.10157585155162371
+        },
+        "track_extract": {
+          "mean": 0.087083845899906,
+          "std": 0.02308422542923168
+        },
+        "track_match": {
+          "mean": 0.11902135829441249,
+          "std": 0.1745043965612174
+        }
+      },
+      "inference_total_per_event_s": 2.27952643801691
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 640,
+      "num_events": 10,
+      "avg_spacepoints": 6944.6,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.026176690217107536,
+          "std": 0.019436349118266225
+        },
+        "graph": {
+          "mean": 0.07363338893046603,
+          "std": 0.02536565902025516
+        },
+        "gnn": {
+          "mean": 2.0960123217082582,
+          "std": 0.02701934243074904
+        },
+        "track_extract": {
+          "mean": 0.08168287461157889,
+          "std": 0.013240624646523522
+        },
+        "track_match": {
+          "mean": 0.06198629861464724,
+          "std": 0.011348593317867684
+        }
+      },
+      "inference_total_per_event_s": 2.3133148838649507
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 680,
+      "num_events": 10,
+      "avg_spacepoints": 7418.9,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.020018088503275067,
+          "std": 0.01384138375646686
+        },
+        "graph": {
+          "mean": 0.08325430059339851,
+          "std": 0.02189410493420682
+        },
+        "gnn": {
+          "mean": 2.289024295704439,
+          "std": 0.12635161983069476
+        },
+        "track_extract": {
+          "mean": 0.09642766382312402,
+          "std": 0.02255453665033717
+        },
+        "track_match": {
+          "mean": 0.07708814869401977,
+          "std": 0.013687368103714723
+        }
+      },
+      "inference_total_per_event_s": 2.545794408814981
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 720,
+      "num_events": 10,
+      "avg_spacepoints": 7843.0,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.02085535688092932,
+          "std": 0.010690949379849638
+        },
+        "graph": {
+          "mean": 0.07134729338577017,
+          "std": 0.016273098236073983
+        },
+        "gnn": {
+          "mean": 2.4266657347325236,
+          "std": 0.13234237162184587
+        },
+        "track_extract": {
+          "mean": 0.09727355660870671,
+          "std": 0.017973075448334395
+        },
+        "track_match": {
+          "mean": 0.0832126654800959,
+          "std": 0.011854200954103904
+        }
+      },
+      "inference_total_per_event_s": 2.6784992502070963
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 760,
+      "num_events": 10,
+      "avg_spacepoints": 8280.3,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.018157063506077976,
+          "std": 0.009005324328628198
+        },
+        "graph": {
+          "mean": 0.07698354648891836,
+          "std": 0.014278922744072999
+        },
+        "gnn": {
+          "mean": 2.5654771360917947,
+          "std": 0.13621272244207908
+        },
+        "track_extract": {
+          "mean": 0.11554456192534417,
+          "std": 0.04917860298135848
+        },
+        "track_match": {
+          "mean": 0.08857875997200608,
+          "std": 0.017406197946659548
+        }
+      },
+      "inference_total_per_event_s": 2.8465840044780637
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 800,
+      "num_events": 10,
+      "avg_spacepoints": 8716.6,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.022058806801214813,
+          "std": 0.013777738424526263
+        },
+        "graph": {
+          "mean": 0.09010946868220344,
+          "std": 0.019823131580882322
+        },
+        "gnn": {
+          "mean": 2.673575848818291,
+          "std": 0.05110067235617904
+        },
+        "track_extract": {
+          "mean": 0.1184269746998325,
+          "std": 0.011037528212858095
+        },
+        "track_match": {
+          "mean": 0.11149193438468501,
+          "std": 0.013081323174939746
+        }
+      },
+      "inference_total_per_event_s": 2.9936042265850116
+    }
+  ]
+}

@@ -7,35 +7,40 @@ model: MetricLearning
 # Data directories
 input_dir: data/feature_store  # PyG graphs from ActsReader (has r, phi, z, particle_id)
 stage_dir: data/metric_learning  # Output directory for trained model
-project: Latent_map_MLP_segmented_300_mixed # W&B project name
-accelerator: gpu
+project: Latent_map_MLP_segmented_geant_mixed_300 # W&B project name
+accelerator: cpu
 devices: 1
 nodes: 1
-logger: false
+logger: false 
 use_wandb: true  # Enable W&B tracking
 wandb_entity: bart_kuipers-nikhef  
-wandb_log_every_n_batches: 500  # Log every N batches to W&B
+wandb_log_every_n_batches: 10  # Log every N batches to W&B
 
 # Dataset split
-data_split: [20000, 900, 50]  # [training, validation, testing]
+data_split: [1000, 50, 200]  # [training, validation, testing] — model converges within first epoch, large train set wasted
 
-# Edge weighting for training
+
 weighting:
-  - weight: 1.0
+  - weight: 0.1
     conditions:
       edge_y: False
   - weight: 1.0
     conditions:
-      edge_y: True  
+      edge_y: True
+      track_particle_primary: True
+  - weight: 0.0
+    conditions:
+      edge_y: True
+      track_particle_primary: False
 
 
 
 # Model architecture
 segmented: true   # true = edges only within a segment (current default); false = edges span full particle (segment boundaries are also true)
 node_features: [hit_r, hit_phi, hit_z]  
-node_scales: [1000, 3.14, 500]  
+node_scales: [1000, 3.14, 1200]  # z/1200 matches Geant4/ODD |z| extent (~1210mm); was 500 (Fatras)
 emb_hidden: 64 #512. #128    
-nb_layer: 6  # depth        eg 3 -> emb_hoidden -> emb_hidden -> emb_dim...x(nb_layer times)--> emb_dim
+nb_layer: 5  # depth        eg 3 -> emb_hoidden -> emb_hidden -> emb_dim...x(nb_layer times)--> emb_dim
 emb_dim: 8  # Final latent dimension 
 activation: Tanh 
 
@@ -43,8 +48,8 @@ activation: Tanh
 randomisation: 1  # Add random negative pairs (number = randomisation * points_per_batch)
 points_per_batch: 5000
 r_train: 0.1      #for hard negative mining
-knn: 50      # training 
-knn_val: 50  # during validation 
+knn: 100     # training 
+knn_val: 100  # during validation 
 
 # Optimization parameters
 warmup: 1
@@ -55,8 +60,8 @@ factor: 0.5 # LR decay factor (multiply LR by this when reducing)
 patience: 1  # Number of epochs with no improvement before reducing LR
 max_epochs: 100
 early_stopping_patience: 5
-check_val_every_n_epoch: 1           
-val_check_interval: 0.2  # Check validation every 10% of epoch for large data.
+check_val_every_n_epoch: 1        
+val_check_interval: 0.1 # every 100 train events (val=50, ~50% overhead); resolves the early peak without validation dominating
 
 # Monitoring
 # NOTE: With knn_val=100, f1 will be low (~0.01-0.05) due to many false edges
@@ -76,5 +81,5 @@ precision: 16-mixed  # Mixed precision training for 2x speedup
 
 # Checkpointing 
 checkpoint_filename: "latentmodel_{f1:.4f}"  # Filename template with validation F1 score
-save_top_k: 1  # Only save the single best model
+save_top_k: 2  # Only save the single best model
 save_last: false  

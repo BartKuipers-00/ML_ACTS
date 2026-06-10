@@ -19,10 +19,39 @@ sys.path.insert(0, str(PIPELINE_ROOT))
 from acorn.core.core_utils import get_stage_module
 from acorn.utils.loading_utils import add_variable_name_prefix_in_config
 from acorn.stages.edge_classifier.models.interaction_gnn import InteractionGNN
+from acorn.stages.edge_classifier.edge_classifier_stage import GraphDataset
 from torch_geometric.loader import DataLoader
+from torch_geometric.data import Dataset
+from class_resolver import ClassResolver
+
+
+class BoolEdgeYGraphDataset(GraphDataset):
+    """GraphDataset that casts edge_y to bool before preprocessing.
+
+    Our graph builder stores edge_y as int64, but ACORN's handle_weighting builds
+    the per-edge weight mask via torch.ones_like(event.edge_y). With an int64
+    edge_y that mask is an integer tensor, so `weights[mask] = value` becomes
+    index-assignment (only touching rows 0/1) and every weighting spec silently
+    no-ops -- zeroing the weight of ALL true edges (pos_loss collapses to 0).
+    Casting edge_y to bool makes the weighting block behave as intended. This
+    fixes existing graphs at load time, so no re-migration is needed.
+    """
+
+    def preprocess_event(self, event):
+        if getattr(event, "edge_y", None) is not None and event.edge_y.dtype != torch.bool:
+            event.edge_y = event.edge_y.bool()
+        return super().preprocess_event(event)
 
 
 class WandbInteractionGNN(InteractionGNN):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Use the bool-edge_y dataset so the weighting block is applied correctly.
+        # gnn_train.yaml does not set dataset_class, so this replaces the default.
+        self.dataset_resolver = ClassResolver(
+            [BoolEdgeYGraphDataset], base=Dataset, default=BoolEdgeYGraphDataset
+        )
 
     def train_dataloader(self):
         """Override to enable shuffling for better gradient accumulation."""

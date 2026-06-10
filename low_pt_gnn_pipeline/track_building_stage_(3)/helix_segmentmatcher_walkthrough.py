@@ -14,10 +14,10 @@ Algorithm:
     5. Evaluate and plot
 
 Usage:
-    python segment_matching_track_builder.py testset
-    python segment_matching_track_builder.py testset --use-gt-segments
-    python segment_matching_track_builder.py testset --score-cut 0.8
-    python segment_matching_track_builder.py testset --skip-build
+    python helix_segmentmatcher_walkthrough.py testset
+    python helix_segmentmatcher_walkthrough.py testset --use-gt-segments
+    python helix_segmentmatcher_walkthrough.py testset --score-cut 0.8
+    python helix_segmentmatcher_walkthrough.py testset --skip-build
 """
 
 import argparse
@@ -66,8 +66,8 @@ def run_segment_matching(dataset_name, config, score_cut=None, use_gt_segments=N
     """
     if data_dir is not None:
         data_dir = Path(data_dir)
-        input_dir = data_dir / 'gnn_stage'
-        output_dir = data_dir / 'track_building'
+        input_dir = data_dir / config.get('input_dir', 'gnn_stage')
+        output_dir = data_dir / config.get('stage_dir', 'track_building')
     else:
         input_dir = Path(config.get('input_dir', 'data/gnn_stage'))
         if not input_dir.is_absolute():
@@ -217,10 +217,10 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python segment_matching_track_builder.py testset
-  python segment_matching_track_builder.py testset --use-gt-segments
-  python segment_matching_track_builder.py testset --score-cut 0.8
-  python segment_matching_track_builder.py testset --skip-build
+  python helix_segmentmatcher_walkthrough.py testset
+  python helix_segmentmatcher_walkthrough.py testset --use-gt-segments
+  python helix_segmentmatcher_walkthrough.py testset --score-cut 0.8
+  python helix_segmentmatcher_walkthrough.py testset --skip-build
         """
     )
     parser.add_argument(
@@ -233,7 +233,7 @@ Examples:
         '--config',
         type=str,
         default=None,
-        help='Path to config file (default: acorn_configs/track_building_stage_(3)/segment_matching.yaml)'
+        help='Path to config file (default: acorn_configs/track_building_stage_(3)/helix_segmentmatcher_walkthrough.yaml)'
     )
     parser.add_argument(
         '--score-cut',
@@ -275,7 +275,7 @@ Examples:
 
     # Load config
     if args.config is None:
-        config_file = PIPELINE_ROOT / 'acorn_configs' / 'track_building_stage_(3)' / 'segment_matching.yaml'
+        config_file = PIPELINE_ROOT / 'acorn_configs' / 'track_building_stage_(3)' / 'helix_segmentmatcher_walkthrough.yaml'
     else:
         config_file = Path(args.config)
 
@@ -297,7 +297,12 @@ Examples:
     output_dir_suffix = config.get('output_dir') or None
     output_dataset = f"{args.dataset}_{output_dir_suffix}" if output_dir_suffix else args.dataset
 
-    data_dir = Path(args.data_dir) if args.data_dir else None
+    # data_set_path (config) acts as a default for --data-dir: all stage dirs
+    # (input_dir, stage_dir, track_evaluation, visuals) live under it.
+    data_root = args.data_dir or config.get('data_set_path')
+    data_dir = Path(data_root) if data_root else None
+    if data_dir is not None and not data_dir.is_absolute():
+        data_dir = PIPELINE_ROOT / data_dir
     if data_dir is not None:
         eval_output_dir = data_dir / 'track_evaluation' / output_dataset
         plot_output_dir = data_dir / 'visuals' / 'track_metrics' / output_dataset
@@ -333,11 +338,22 @@ Examples:
     print("=" * 70)
     print()
 
-    if data_dir is not None:
-        config['input_dir'] = str(data_dir / 'track_building')
+    # pre_build_tracks_dir (only with --skip-build): read prebuilt tracks from this
+    # dataset dir (relative to data_set_path), decoupled from output_dir naming.
+    prebuilt = config.get('pre_build_tracks_dir') if args.skip_build else None
+    if prebuilt:
+        prebuilt = Path(prebuilt)
+        if not prebuilt.is_absolute():
+            prebuilt = (data_dir / prebuilt) if data_dir is not None else (PIPELINE_ROOT / prebuilt)
+        config['input_dir'] = str(prebuilt.parent)
+        read_dataset = prebuilt.name
     else:
-        config['input_dir'] = str(PIPELINE_ROOT / 'data' / 'track_building')
-    evaluated_events, summary, summary_text = run_evaluation(output_dataset, config)
+        if data_dir is not None:
+            config['input_dir'] = str(data_dir / config.get('stage_dir', 'track_building'))
+        else:
+            config['input_dir'] = str(PIPELINE_ROOT / 'data' / 'track_building')
+        read_dataset = output_dataset
+    evaluated_events, summary, summary_text = run_evaluation(read_dataset, config)
     save_evaluation_results(evaluated_events, summary, summary_text, output_dataset, eval_output_dir)
 
     print()

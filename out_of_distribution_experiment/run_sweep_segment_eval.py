@@ -39,7 +39,7 @@ from low_pt_custom_utils.track_evaluation_utils import (
 
 
 def _build_helix_config(ood: dict, data_dir: Path, track_build_dir: Path) -> dict:
-    base = PIPELINE_ROOT / "acorn_configs" / "track_building_stage_(3)" / "segment_matching.yaml"
+    base = PIPELINE_ROOT / "acorn_configs" / "track_building_stage_(3)" / "helix_segmentmatcher_walkthrough.yaml"
     with open(base) as f:
         config = yaml.safe_load(f)
     config["data_split"] = [0, 0, ood["n_events"]]
@@ -149,7 +149,7 @@ def main():
             print()
             run_gnn_segment_matching(dataset_name, config, model, device)
     else:
-        from segment_matching_track_builder import run_segment_matching
+        from helix_segmentmatcher_walkthrough import run_segment_matching
         config = _build_helix_config(ood, data_dir, track_build_dir)
 
         if not args.skip_build:

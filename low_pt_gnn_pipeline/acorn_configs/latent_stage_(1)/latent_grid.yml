@@ -3,33 +3,31 @@
 # Usage:
 #   1. cd /data/alice/bkuipers/low_pt_gnn_pipeline/latent_stage_(1)
 #   2. python generate_grid_search.py
-#   3. cd ../../jobs && condor_submit train_latent_gridsearch.sub
+
 #
-# This creates configs and launches GPU jobs in parallel.
-# All results logged to W&B: bart_kuipers-nikhef/Low_pt_latent_map_gridsearch
 #
 # Each combination will be run as a separate GPU batch job
 
 # Grid search parameters (lists = grid, single values = fixed)
 grid_params:
   # Model architecture
-  emb_hidden: [64, 128,256]        # Hidden layer size
-  nb_layer: [5,7]               # Number of layers
+  emb_hidden: [64]        # Hidden layer size
+  nb_layer: [5]               # Number of layers
   emb_dim: [8]               # Final latent space dimension
   activation: [Tanh]    # Activation function
 
   # Training parameters
-  lr: [0.001]           # Learning rate
+  lr: [0.001, 0.0001]           # Learning rate
   
   # Paired parameters - must have same length, values at same index are used together
-  margin:   [ 0.1]     # Contrastive loss margin
-  r_train:  [ 0.1]     # Hard negative mining radius (always same as margin)
+  margin:   [0.1]     # Contrastive loss margin
+  r_train:  [0.1]     # Hard negative mining radius (always same as margin)
 
   # Sampling parameters
   points_per_batch: [5000]
   randomisation: [1]                 # Random negative pairs multiplier
-  knn: [50]                          # Max neighbors during training
-  knn_val: [50]                      # Max neighbors during validation
+  knn: [100]                          # Max neighbors during training
+  knn_val: [100]                      # Max neighbors during validation
 
   # Scheduler
   patience: [2]
@@ -47,13 +45,13 @@ fixed_params:
   # Data directories
   input_dir: data/feature_store/
   stage_dir: data/metric_learning/
-  data_split: [50000, 900, 900]
+  data_split: [1000, 50, 100]
 
   # W&B
-  project: Latent_map_MLP_segmented_300_mixed
+  project: Latent_map_300_mixed_geant_grids_small_2
   use_wandb: true
   wandb_entity: bart_kuipers-nikhef
-  wandb_log_every_n_batches: 100
+  wandb_log_every_n_batches: 10
 
   # Hardware
   accelerator: cpu
@@ -65,17 +63,23 @@ fixed_params:
   undirected: true
   train_undirected: true
   node_features: [hit_r, hit_phi, hit_z]
+
   segmented: true
-  node_scales: [1000, 3.14, 500]
+  node_scales: [1000, 3.14, 1210]
 
   # Edge weighting
   weighting:
-    - weight: 1.0
+    - weight: 0.1
       conditions:
         edge_y: False
-    - weight: 2.0
+    - weight: 1.0
       conditions:
         edge_y: True
+        track_particle_primary: True
+    - weight: 0.0
+      conditions:
+        edge_y: True
+        track_particle_primary: False
 
   # Training optimization
   warmup: 1
@@ -83,18 +87,18 @@ fixed_params:
   max_epochs: 100
   early_stopping_patience: 5
   check_val_every_n_epoch: 1
-  val_check_interval: 0.2
+  val_check_interval: 0.1   # every 100 train events (val=50, ~50% overhead); model peaks within first epoch, so resolve the early region
 
 
   # Monitoring
   metric_to_monitor: f1
   metric_mode: max
-  num_workers: [8, 8, 0]
+  num_workers: [3, 3, 0]
 
   # GPU optimizations
   precision: 16-mixed
 
   # Checkpointing
   checkpoint_filename: "latentmodel_f1_{f1:.4f}"
-  save_top_k: 1
+  save_top_k: 2
   save_last: false

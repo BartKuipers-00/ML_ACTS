@@ -104,7 +104,7 @@ def load_track_building_graph(dataset_name, index, input_dir=None):
             f"\nGraph does not have edge_index attribute.\n"
             f"  Graph file: {graph_path}\n"
             f"  Solution: Re-run track building:\n"
-            f"    python track_build_and_evaluate.py testset\n"
+            f"    python helix_segmentmatcher_walkthrough.py testset\n"
         )
 
     if not hasattr(graph, 'scores') and not hasattr(graph, 'edge_scores'):
@@ -113,7 +113,7 @@ def load_track_building_graph(dataset_name, index, input_dir=None):
             f"  Graph file: {graph_path}\n"
             f"  Solution: Re-run GNN inference and track building:\n"
             f"    python infer_gnn.py\n"
-            f"    python track_build_and_evaluate.py testset\n"
+            f"    python helix_segmentmatcher_walkthrough.py testset\n"
         )
 
     if not hasattr(graph, 'hit_track_labels'):
@@ -121,7 +121,7 @@ def load_track_building_graph(dataset_name, index, input_dir=None):
             f"\nGraph does not have hit_track_labels attribute.\n"
             f"  Graph file: {graph_path}\n"
             f"  Solution: Re-run track building:\n"
-            f"    python track_build_and_evaluate.py testset\n"
+            f"    python helix_segmentmatcher_walkthrough.py testset\n"
         )
 
     return graph, graph_path
@@ -210,7 +210,7 @@ def create_track_visualization(graph, dataset_name, index):
     # Load score_cut threshold from config
     import yaml
     script_dir = Path(__file__).resolve().parent
-    config_path = script_dir.parent / 'acorn_configs' / 'track_building_stage_(3)' / 'track_build_and_evaluate.yaml'
+    config_path = script_dir.parent / 'acorn_configs' / 'track_building_stage_(3)' / 'helix_segmentmatcher_walkthrough.yaml'
     try:
         with open(config_path) as f:
             config = yaml.safe_load(f)

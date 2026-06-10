@@ -78,10 +78,7 @@ struct NavigationOptions {
   /// candidate-list construction's relevant path lengths.
   double helixQOverP = 0.0;
   Vector3 helixBField = Vector3::Zero();
-  /// The actual stepper tangent (raw direction). Distinct from the
-  /// `direction` argument to `compatibleSurfaces`, which the navigator
-  /// substitutes (e.g. with the radial bisector) to make the line-tangent
-  /// predicate well-behaved at the bin lookup. The helix predicate needs
+  /// The actual stepper tangent (raw direction). The helix predicate needs
   /// the raw tangent to compute the helix center correctly.
   Vector3 helixDirection = Vector3::Zero();
 };
@@ -731,8 +728,7 @@ class Navigator {
       // regime so the candidate-list construction's per-surface intersect
       // uses the closed-form helix-plane predicate (with bounded check on
       // the actual curved landing) instead of the line tangent. The raw
-      // tangent (`direction`) is passed via helixDirection because the
-      // `direction` argument to compatibleSurfaces is the bisector below.
+      // tangent is passed via helixDirection.
       // Set ACTS_DISABLE_HELIX_INTERSECT=1 in the environment for a clean
       // line-everywhere baseline (matches the SteppingHelper switch).
       static const bool helixDisabled =
@@ -1118,26 +1114,18 @@ class Navigator {
   ///
   /// When particles turn inward in barrel regions, the raw momentum direction
   /// is near-tangential at the apex and the line-plane intersect mis-targets
-  /// inner layers and modules. Two substitutions are needed:
-  ///
-  ///  - Pure radial (`useBisector = false`): for compatibleLayers /
-  ///    compatibleBoundaries volume-wide candidate searches. A bisector
-  ///    here is mostly tangential at the turning point and drops inner
-  ///    layers from the candidate list.
-  ///  - Bisector (`useBisector = true`): for compatibleSurfaces on the
-  ///    current layer (bin lookup + per-surface intersect). The bisector
-  ///    keeps a well-conditioned radial component for the line-plane
-  ///    denominator while preserving forward motion, so the bin lookup
-  ///    lands on the right phi-bin.
+  /// inner layers. For volume-wide candidate searches (compatibleLayers /
+  /// compatibleBoundaries) we substitute the raw tangent with pure radial
+  /// inward, $-\hat r$, so inner layers are not dropped from the candidate
+  /// list. On-layer module targeting (compatibleSurfaces) keeps the raw
+  /// tangent and uses the closed-form helix-plane intersect instead.
   ///
   /// @param state The navigation state
   /// @param position Current position
   /// @param direction Original propagation direction
-  /// @param useBisector If true, return bisector(direction, -r̂); else -r̂.
   /// @return Effective direction for intersection calculations
   Vector3 computeEffectiveDirection(State& state, const Vector3& position,
-                                    const Vector3& direction,
-                                    bool useBisector = false) const {
+                                    const Vector3& direction) const {
     Vector3 effectiveDirection = direction;
 
     if (!state.radiallyInward) {
@@ -1155,26 +1143,8 @@ class Navigator {
       return effectiveDirection;
     }
 
-    double r_hat_x = position[0] / r_xy;
-    double r_hat_y = position[1] / r_xy;
-
-    if (useBisector) {
-      double sum_x = direction[0] - r_hat_x;
-      double sum_y = direction[1] - r_hat_y;
-      double sum_z = direction[2];
-      double sum_mag = std::sqrt(sum_x * sum_x + sum_y * sum_y + sum_z * sum_z);
-      if (sum_mag > 1e-9) {
-        effectiveDirection[0] = sum_x / sum_mag;
-        effectiveDirection[1] = sum_y / sum_mag;
-        effectiveDirection[2] = sum_z / sum_mag;
-        ACTS_VERBOSE("Using bisector(tangent, radial-inward) effective direction in barrel");
-        return effectiveDirection;
-      }
-      ACTS_VERBOSE("Bisector degenerate — falling back to pure radial inward");
-    }
-
-    effectiveDirection[0] = -r_hat_x;
-    effectiveDirection[1] = -r_hat_y;
+    effectiveDirection[0] = -position[0] / r_xy;
+    effectiveDirection[1] = -position[1] / r_xy;
     effectiveDirection[2] = 0.0;
     ACTS_VERBOSE("Using pure radial inward direction in barrel");
     return effectiveDirection;

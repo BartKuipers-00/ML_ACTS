@@ -108,24 +108,31 @@ class MetricLearningWithReduceLROnPlateau(MetricLearning):
         signal_eff = signal_true_pred_edges.shape[1] / signal_true_edges.shape[1]
         total_pur = true_pred_edges.shape[1] / pred_edges.shape[1]
         signal_pur = signal_true_pred_edges.shape[1] / pred_edges.shape[1]
-        f1 = 2 * (signal_eff * signal_pur) / (signal_eff + signal_pur)
+        f1 = (
+            2 * (signal_eff * signal_pur) / (signal_eff + signal_pur)
+            if (signal_eff + signal_pur) > 0
+            else 0.0
+        )
 
         current_lr = self.optimizers().param_groups[0]["lr"]
-        
-        # Log with prog_bar=True to ensure W&B picks them up prominently
+
+        # Report eff and purity exactly like f1: computed per val step, then
+        # accumulated and averaged over the whole val set (on_epoch=True,
+        # on_step=False). No per-step logging — only the val-set average.
         self.log_dict(
             {
                 "val_loss": loss,
                 "lr": current_lr,
                 "total_eff": total_eff,
                 "total_pur": total_pur,
-
+                "signal_eff": signal_eff,
+                "signal_pur": signal_pur,
                 "f1": f1,
             },
             batch_size=1,
             on_epoch=True,
-            on_step=True,
-            prog_bar=True,  # This ensures metrics show in progress bar AND are prominent in W&B
+            on_step=False,
+            prog_bar=True,  # show the val-set averages in the progress bar / W&B
             sync_dist=True,
         )
     

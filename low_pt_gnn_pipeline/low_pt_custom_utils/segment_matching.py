@@ -195,22 +195,99 @@ def fit_helices_to_segments(
 
     Returns:
         Same list with helix field populated.
+
+    Batched (bincount sums + batched 3x3 solve); n<3 / singular / outlier-rejection fall back
+    to the per-segment routine.
     """
-    x = graph.hit_x.cpu().numpy()
-    y = graph.hit_y.cpu().numpy()
-    z = graph.hit_z.cpu().numpy()
+    x = graph.hit_x.cpu().numpy().astype(np.float64, copy=False)
+    y = graph.hit_y.cpu().numpy().astype(np.float64, copy=False)
+    z = graph.hit_z.cpu().numpy().astype(np.float64, copy=False)
+    N = len(segments)
+    if N == 0:
+        return segments
 
-    for seg in segments:
-        seg_x = x[seg.hits]
-        seg_y = y[seg.hits]
-        seg_z = z[seg.hits]
+    if outlier_rejection:   # iterative path — keep the exact per-segment routine
+        for seg in segments:
+            seg.helix = fit_helix_to_segment(x[seg.hits], y[seg.hits], z[seg.hits],
+                                             B_field=B_field, outlier_rejection=True)
+        return segments
 
-        seg.helix = fit_helix_to_segment(
-            seg_x, seg_y, seg_z,
-            B_field=B_field,
-            outlier_rejection=outlier_rejection,
+    nhits = np.fromiter((len(s.hits) for s in segments), dtype=np.int64, count=N)
+    flat = np.concatenate([np.asarray(s.hits, dtype=np.int64) for s in segments])
+    seg_ids = np.repeat(np.arange(N), nhits)
+    xs, ys, zs = x[flat], y[flat], z[flat]
+    nf = nhits.astype(np.float64)
+    bc = lambda w: np.bincount(seg_ids, weights=w, minlength=N)
+
+    # --- batched Kasa circle fit via per-segment normal equations  A=[2x,2y,1], b=x^2+y^2 ---
+    bb = xs * xs + ys * ys
+    Sx, Sy = bc(xs), bc(ys)
+    Sxx, Syy, Sxy = bc(xs * xs), bc(ys * ys), bc(xs * ys)
+    Sb, Sxb, Syb = bc(bb), bc(xs * bb), bc(ys * bb)
+    AtA = np.zeros((N, 3, 3))
+    AtA[:, 0, 0] = 4 * Sxx; AtA[:, 0, 1] = 4 * Sxy; AtA[:, 0, 2] = 2 * Sx
+    AtA[:, 1, 0] = 4 * Sxy; AtA[:, 1, 1] = 4 * Syy; AtA[:, 1, 2] = 2 * Sy
+    AtA[:, 2, 0] = 2 * Sx;  AtA[:, 2, 1] = 2 * Sy;  AtA[:, 2, 2] = nf
+    Atb = np.stack([2 * Sxb, 2 * Syb, Sb], axis=1)
+
+    xc = np.zeros(N); yc = np.zeros(N); R = np.full(N, np.nan)
+    ok = nhits >= 3
+    gi = np.where(ok)[0]
+    if gi.size:
+        sol = np.full((gi.size, 3), np.nan)
+        try:
+            sol = np.linalg.solve(AtA[gi], Atb[gi])
+        except np.linalg.LinAlgError:               # a singular segment in the batch
+            for j, k in enumerate(gi):
+                try: sol[j] = np.linalg.solve(AtA[k], Atb[k])
+                except np.linalg.LinAlgError: sol[j] = np.nan
+        xc[gi], yc[gi] = sol[:, 0], sol[:, 1]
+        R2 = sol[:, 2] + sol[:, 0] ** 2 + sol[:, 1] ** 2
+        R[gi] = np.sqrt(np.where(R2 > 0, R2, np.nan))
+    valid = ok & np.isfinite(R) & (R > 0)
+    Rcap = np.minimum(R, 10000.0)                    # cap (used for arc/pT/stored R; residuals use raw R)
+
+    # residual_rms per segment (uses uncapped R, matching the scalar routine)
+    dist = np.sqrt((xs - xc[seg_ids]) ** 2 + (ys - yc[seg_ids]) ** 2)
+    with np.errstate(invalid="ignore"):
+        residual_rms = np.sqrt(bc((dist - R[seg_ids]) ** 2) / nf)
+
+    # arc length per hit (cumulative within segment), then closed-form pitch regression
+    theta = np.arctan2(ys - yc[seg_ids], xs - xc[seg_ids])
+    starts = np.zeros(N, dtype=np.int64); starts[1:] = np.cumsum(nhits)[:-1]
+    dtheta = np.zeros(flat.size); dtheta[1:] = theta[1:] - theta[:-1]
+    dtheta = (dtheta + np.pi) % (2 * np.pi) - np.pi
+    dtheta[starts] = 0.0                             # no step at a segment's first hit
+    contrib = np.abs(dtheta) * Rcap[seg_ids]
+    contrib = np.where(valid[seg_ids], contrib, 0.0)  # don't let an invalid segment poison the cumsum
+    cum = np.cumsum(contrib)
+    offset = np.where(starts > 0, cum[np.maximum(starts - 1, 0)], 0.0)
+    arc = cum - offset[seg_ids]
+    arc_span = arc[starts + nhits - 1]              # arc is monotonic within a segment, first = 0
+
+    Ss, Sz, Sss, Ssz = bc(arc), bc(zs), bc(arc * arc), bc(arc * zs)
+    denom = nf * Sss - Ss * Ss
+    with np.errstate(invalid="ignore", divide="ignore"):
+        pitch_arr = (nf * Ssz - Ss * Sz) / denom
+        z0_lin = (Sz - pitch_arr * Ss) / nf
+    z_mean = Sz / nf
+    pT = 0.3 * B_field * Rcap / 1000.0
+    phi = np.arctan2(yc, xc)
+
+    # Build HelixParams — math is batched; only the cheap object construction loops.
+    for i, seg in enumerate(segments):
+        if not valid[i]:                            # n<3 / singular / R^2<=0 -> exact scalar routine
+            seg.helix = fit_helix_to_segment(x[seg.hits], y[seg.hits], z[seg.hits],
+                                             B_field=B_field, outlier_rejection=False)
+            continue
+        has_pitch = arc_span[i] > 1e-6
+        seg.helix = HelixParams(
+            xc=float(xc[i]), yc=float(yc[i]), R=float(Rcap[i]),
+            pitch=float(pitch_arr[i]) if has_pitch else None,
+            z0=float(z0_lin[i]) if has_pitch else float(z_mean[i]),
+            pT=float(pT[i]), phi_center=float(phi[i]),
+            fit_quality="good", residual_rms=float(residual_rms[i]), nhits=int(nhits[i]),
         )
-
     return segments
 
 
@@ -309,6 +386,7 @@ def compute_matching_score(
 def match_segments(
     segments: List[SegmentInfo],
     config: dict,
+    timing: dict = None,
 ) -> Tuple[List[List[SegmentInfo]], List[SegmentInfo]]:
     """
     Greedy matching of segments based on helix parameter compatibility.
@@ -327,6 +405,8 @@ def match_segments(
         matched_tracks: List of lists of SegmentInfo (each list = one track).
         unmatched: List of SegmentInfo objects that were not matched.
     """
+    from time import perf_counter
+    t_score0 = perf_counter()
     outer_r_threshold = config.get("outer_r_threshold", 1000.0)
 
     # Step 1: Separate complete (straight-through) segments from matching candidates.
@@ -342,27 +422,49 @@ def match_segments(
         if i not in complete and seg.helix and seg.helix.fit_quality == "good"
     ]
 
-    # Step 3: Compute all pairwise scores between fittable, non-complete segments
-    candidates = []
-    for ai in range(len(fittable)):
-        for bi in range(ai + 1, len(fittable)):
-            idx_a, seg_a = fittable[ai]
-            idx_b, seg_b = fittable[bi]
-            score, compatible = compute_matching_score(seg_a, seg_b, config)
-            if compatible and score > 0:
-                candidates.append((score, idx_a, idx_b))
+    # Step 3: vectorised pairwise scoring (same candidates as compute_matching_score, no loop).
+    cand_a, cand_b = [], []
+    if len(fittable) >= 2:
+        idxs = np.array([i for i, _ in fittable])
+        hel = [s.helix for _, s in fittable]
+        xc = np.array([h.xc for h in hel]); yc = np.array([h.yc for h in hel])
+        R = np.array([h.R for h in hel])
+        pit = np.array([abs(h.pitch) if h.pitch is not None else np.nan for h in hel])
 
-    # Sort by score descending
-    candidates.sort(key=lambda x: x[0], reverse=True)
+        max_cd = config.get("max_center_distance", 100.0)
+        min_Rr = config.get("min_R_ratio", 0.5)
+        s_c = config.get("sigma_center", 30.0); s_R = config.get("sigma_R", 0.1); s_p = config.get("sigma_pitch", 0.01)
+        w_c = config.get("weight_center", 0.5); w_R = config.get("weight_R", 0.3); w_p0 = config.get("weight_pitch", 0.2)
+
+        ii, jj = np.triu_indices(len(fittable), k=1)        # i<j, row-major (= original loop order)
+        cd = np.hypot(xc[ii] - xc[jj], yc[ii] - yc[jj])
+        Rmx = np.maximum(R[ii], R[jj]); Rmn = np.minimum(R[ii], R[jj])
+        with np.errstate(divide="ignore", invalid="ignore"):
+            Rr = np.where(Rmx >= 1e-6, Rmn / Rmx, 0.0)
+        ks = np.nonzero((cd <= max_cd) & (Rmx >= 1e-6) & (Rr >= min_Rr))[0]   # hard cuts first
+
+        # soft Gaussian score on survivors only (avoid exp over all N^2 pairs)
+        cdk, Rrk = cd[ks], Rr[ks]; pik, pjk = pit[ii[ks]], pit[jj[ks]]
+        has_p = ~np.isnan(pik) & ~np.isnan(pjk)
+        s_pitch = np.where(has_p, np.exp(-np.abs(pik - pjk) ** 2 / (2 * s_p ** 2)), 1.0)
+        w_p = np.where(has_p, w_p0, 0.0); tw = w_c + w_R + w_p
+        score = (w_c * np.exp(-cdk ** 2 / (2 * s_c ** 2))
+                 + w_R * np.exp(-(Rrk - 1.0) ** 2 / (2 * s_R ** 2)) + w_p * s_pitch) / tw
+
+        keep2 = score > 0
+        sel = ks[keep2]
+        order = sel[np.argsort(-score[keep2], kind="stable")]           # stable -> same tie-break
+        cand_a = idxs[ii[order]].tolist(); cand_b = idxs[jj[order]].tolist()
 
     # Greedy matching
+    t_score = perf_counter() - t_score0
+    t_g0 = perf_counter()
     matched = set()
     matched_tracks = []
 
-    for score, idx_a, idx_b in candidates:
+    for idx_a, idx_b in zip(cand_a, cand_b):
         if idx_a in matched or idx_b in matched:
             continue
-        # Match these two segments into one track
         matched_tracks.append([segments[idx_a], segments[idx_b]])
         matched.add(idx_a)
         matched.add(idx_b)
@@ -373,6 +475,9 @@ def match_segments(
         if i not in matched:
             unmatched.append(seg)
 
+    if timing is not None:
+        timing["score"] = t_score
+        timing["greedy"] = perf_counter() - t_g0
     return matched_tracks, unmatched
 
 
@@ -450,6 +555,41 @@ def passes_geometric_cut(
     return float(np.min(np.sqrt(dx**2 + dy**2 + dz**2))) >= cut_mm
 
 
+def geometric_cut_batch(high_r_hits, cand_i, cand_j, r_tol, cut_mm):
+    """Vectorised passes_geometric_cut over all candidate pairs at once (same result, no python loop)."""
+    ci = np.asarray(cand_i); cj = np.asarray(cand_j)
+    P = ci.shape[0]
+    if P == 0:
+        return np.ones(0, dtype=bool)
+    lens = np.array([len(h[0]) for h in high_r_hits], dtype=np.int64)
+    H = int(lens.max()) if lens.size else 0
+    if H == 0:
+        return np.ones(P, dtype=bool)
+    Nseg = len(high_r_hits)
+    R = np.full((Nseg, H), np.inf); X = np.zeros((Nseg, H)); Y = np.zeros((Nseg, H)); Z = np.zeros((Nseg, H))
+    M = np.zeros((Nseg, H), dtype=bool)
+    for k, (rs, xs, ys, zs) in enumerate(high_r_hits):
+        L = len(rs)
+        if L:
+            R[k, :L] = rs; X[k, :L] = xs; Y[k, :L] = ys; Z[k, :L] = zs; M[k, :L] = True
+
+    ri, Mi = R[ci], M[ci]
+    rj, Mj = R[cj], M[cj]
+    with np.errstate(invalid="ignore"):
+        dr = np.abs(ri[:, :, None] - rj[:, None, :])
+    dr = np.where(Mj[:, None, :], dr, np.inf)               # nearest valid j-hit per i-hit
+    nearest = np.argmin(dr, axis=2)
+    nearest_dr = np.take_along_axis(dr, nearest[:, :, None], axis=2)[:, :, 0]
+    co_layer = Mi & (nearest_dr < r_tol)
+    xj_n = np.take_along_axis(X[cj], nearest, axis=1)
+    yj_n = np.take_along_axis(Y[cj], nearest, axis=1)
+    zj_n = np.take_along_axis(Z[cj], nearest, axis=1)
+    d3 = np.sqrt((X[ci] - xj_n) ** 2 + (Y[ci] - yj_n) ** 2 + (Z[ci] - zj_n) ** 2)
+    min_d3 = np.where(co_layer, d3, np.inf).min(axis=1)
+    empty = (lens[ci] == 0) | (lens[cj] == 0)
+    return empty | ~np.isfinite(min_d3) | (min_d3 >= cut_mm)
+
+
 # ─── Track Assembly ────────────────────────────────────────────────────────
 
 
@@ -474,36 +614,28 @@ def segments_to_track_labels(
     Returns:
         hit_track_labels: Tensor of shape (num_nodes,), -1 for unassigned.
     """
-    labels = torch.ones(num_nodes, dtype=torch.long) * -1
+    labels = torch.full((num_nodes,), -1, dtype=torch.long)
     track_id = 0
+    idx_all, lab_all = [], []   # accumulate (hit, track_id) for one vectorised scatter at the end
 
-    # Matched tracks: each group of segments = one track
+    # Matched tracks: each group of segments = one track. (hit_t is unused — ordering hits
+    # within a track does not change their shared label, so the old per-hit argsort was a no-op.)
     for track_segments in matched_tracks:
-        # Collect all hits from all segments in this track
-        all_hits = []
+        hits = set()
         for seg in track_segments:
-            all_hits.extend(seg.hits)
-
-        # Remove duplicates (shouldn't happen but be safe)
-        all_hits = list(set(all_hits))
-
-        # Optionally order by time
-        if hit_t is not None and len(all_hits) > 0:
-            hit_times = np.asarray(hit_t[all_hits], dtype=np.float64)
-            order = np.argsort(hit_times)
-            all_hits = [all_hits[i] for i in order]
-
-        for hit_idx in all_hits:
-            labels[hit_idx] = track_id
+            hits.update(seg.hits)   # dedup across segments of the same track
+        idx_all.extend(hits); lab_all += [track_id] * len(hits)
         track_id += 1
 
     # Unmatched segments: each becomes a standalone track
     for seg in unmatched:
         if len(seg.hits) == 0:
             continue
-        for hit_idx in seg.hits:
-            labels[hit_idx] = track_id
+        idx_all.extend(seg.hits); lab_all += [track_id] * len(seg.hits)
         track_id += 1
+
+    if idx_all:   # one assignment instead of ~N_hits torch scalar sets
+        labels[torch.as_tensor(idx_all, dtype=torch.long)] = torch.as_tensor(lab_all, dtype=torch.long)
 
     return labels
 
@@ -545,7 +677,10 @@ def build_tracks_for_event(
     outlier_rejection = config.get("outlier_rejection", False)
     matching_config = config.get("matching", {})
 
-    # Step 1: Extract segments
+    from time import perf_counter
+
+    # Step 1: Extract segments  (CC / Wrangler on edge_scores — shared with the GNN matcher)
+    t0 = perf_counter()
     n_wrangler_splits = 0
     if use_gt:
         segments = extract_segments_from_ground_truth(graph)
@@ -554,18 +689,24 @@ def build_tracks_for_event(
         segments, n_wrangler_splits = extract_segments_with_wrangler(graph, score_cut)
     else:
         segments = extract_segments_from_cc(graph, score_cut)
+    t_extract = perf_counter() - t0
 
     n_segments = len(segments)
 
-    # Step 2: Fit helices
+    # Step 2: Fit helices (Kasa circle fit + pitch, per segment)
+    t0 = perf_counter()
     segments = fit_helices_to_segments(segments, graph, B_field=B_field, outlier_rejection=outlier_rejection)
+    t_fit = perf_counter() - t0
 
     n_good_fits = sum(1 for s in segments if s.helix and s.helix.fit_quality == "good")
     n_poor_fits = sum(1 for s in segments if s.helix and s.helix.fit_quality == "poor")
     n_no_fits = sum(1 for s in segments if s.helix and s.helix.fit_quality == "none")
 
-    # Step 3: Match segments
-    matched_tracks, unmatched = match_segments(segments, matching_config)
+    # Step 3: Match segments by helix parameters
+    t0 = perf_counter()
+    mtiming = {}
+    matched_tracks, unmatched = match_segments(segments, matching_config, timing=mtiming)
+    t_match = perf_counter() - t0
 
     # Step 4: Convert to labels (short segments become standalone tracks)
     num_nodes = graph.hit_x.size(0)
@@ -595,6 +736,11 @@ def build_tracks_for_event(
         "n_total_tracks": n_total_tracks,
         "n_assigned_hits": n_assigned,
         "n_unassigned_hits": n_unassigned,
+        "time_extract_s": t_extract,
+        "time_fit_s": t_fit,
+        "time_match_s": t_match,
+        "time_score_s": mtiming.get("score", 0.0),    # vectorised pairwise scoring
+        "time_greedy_s": mtiming.get("greedy", 0.0),  # greedy assignment loop
     }
 
     if return_matching_info:

@@ -64,10 +64,11 @@ def kasa_circle_fit(x: np.ndarray, y: np.ndarray) -> Tuple[float, float, float, 
     A = np.column_stack([2.0 * x, 2.0 * y, np.ones(n)])
     b = x**2 + y**2
 
-    # Solve via least squares
-    result, _, rank, _ = np.linalg.lstsq(A, b, rcond=None)
-
-    if rank < 3:
+    # Solve the normal equations (A^T A) x = A^T b — a 3x3 solve, ~5x cheaper than the
+    # SVD-based lstsq and identical for this well-conditioned over-determined fit.
+    try:
+        result = np.linalg.solve(A.T @ A, A.T @ b)
+    except np.linalg.LinAlgError:
         raise ValueError("Degenerate circle fit (points may be collinear)")
 
     xc, yc, c = result
@@ -204,10 +205,15 @@ def fit_pitch(arc_lengths: np.ndarray, z: np.ndarray) -> Tuple[float, float, np.
     if len(arc_lengths) < 2:
         return 0.0, z[0] if len(z) > 0 else 0.0, np.array([0.0])
 
-    # Linear fit: z = pitch * s + z0
-    A = np.column_stack([arc_lengths, np.ones(len(arc_lengths))])
-    result, _, _, _ = np.linalg.lstsq(A, z, rcond=None)
-    pitch, z0 = result
+    # Closed-form least-squares line z = pitch*s + z0 (identical to lstsq, no SVD).
+    s_mean = arc_lengths.mean(); z_mean = z.mean()
+    ds = arc_lengths - s_mean
+    denom = float(ds @ ds)
+    if denom < 1e-12:
+        pitch, z0 = 0.0, z_mean
+    else:
+        pitch = float(ds @ (z - z_mean)) / denom
+        z0 = z_mean - pitch * s_mean
 
     z_predicted = z0 + pitch * arc_lengths
     residuals = np.abs(z - z_predicted)

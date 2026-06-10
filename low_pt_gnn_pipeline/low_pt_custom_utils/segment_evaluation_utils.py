@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 import torch
 
 from low_pt_custom_utils.mini_gnn_segment_embedding import get_segment_particle_id
@@ -311,6 +312,8 @@ def plot_segment_evaluation(
         ax.set_ylim(y_lim)
         ax.tick_params(axis="both", labelsize=fs_tk)
         ax.grid(True, alpha=0.3)
+        ax.xaxis.set_minor_locator(MultipleLocator(0.05))   # 0.05 GeV minor grid, no labels
+        ax.grid(True, which="minor", axis="x", alpha=0.15)
         ax.set_title(title, fontsize=fs_ti)
         return fig, ax
 
@@ -954,6 +957,8 @@ def plot_matching_efficiency(
     ax.set_ylim(y_lim)
     ax.tick_params(axis="both", labelsize=fs_tk)
     ax.grid(True, alpha=0.3)
+    ax.xaxis.set_minor_locator(MultipleLocator(0.05))   # 0.05 GeV minor grid, no labels
+    ax.grid(True, which="minor", axis="x", alpha=0.15)
     ax.set_title(pt_title, fontsize=fs_ti)
 
     pd_pt = {"plot_type": "matching_efficiency", "xlabel": x_label,

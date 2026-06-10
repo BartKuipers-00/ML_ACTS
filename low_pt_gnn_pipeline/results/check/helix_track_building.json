@@ -1,0 +1,354 @@
+{
+  "meta": {
+    "matcher": "helix",
+    "host": "stbc-i1.nikhef.nl",
+    "cpu": "AMD EPYC 7551P 32-Core Processor",
+    "cpu_threads": 24,
+    "max_events": 10,
+    "input": "gnn_stage",
+    "score_cut": 0.4,
+    "use_wrangler": true
+  },
+  "records": [
+    {
+      "dataset": "data_10",
+      "multiplicity": 40,
+      "num_events": 10,
+      "avg_spacepoints": 428.9,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.002297499496489763,
+          "std": 0.0002681901844016191
+        },
+        "track_match": {
+          "mean": 0.0017064078710973263,
+          "std": 0.00044086035912138243
+        }
+      },
+      "track_building_total_per_event_s": 0.004003907367587089
+    },
+    {
+      "dataset": "data_20",
+      "multiplicity": 80,
+      "num_events": 10,
+      "avg_spacepoints": 869.3,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.013973186071962119,
+          "std": 0.0016062548735351675
+        },
+        "track_match": {
+          "mean": 0.021651983074843884,
+          "std": 0.004837979637797235
+        }
+      },
+      "track_building_total_per_event_s": 0.035625169146806
+    },
+    {
+      "dataset": "data_30",
+      "multiplicity": 120,
+      "num_events": 10,
+      "avg_spacepoints": 1298.2,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.02229912057518959,
+          "std": 0.0007905212120793439
+        },
+        "track_match": {
+          "mean": 0.04171325308270753,
+          "std": 0.001980237260293891
+        }
+      },
+      "track_building_total_per_event_s": 0.06401237365789711
+    },
+    {
+      "dataset": "data_40",
+      "multiplicity": 160,
+      "num_events": 10,
+      "avg_spacepoints": 1746.5,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.029200191400013863,
+          "std": 0.001333946425899216
+        },
+        "track_match": {
+          "mean": 0.05630606911145151,
+          "std": 0.0023641721920291438
+        }
+      },
+      "track_building_total_per_event_s": 0.08550626051146537
+    },
+    {
+      "dataset": "data_50",
+      "multiplicity": 200,
+      "num_events": 10,
+      "avg_spacepoints": 2140.0,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.0335929166758433,
+          "std": 0.0007546811040978346
+        },
+        "track_match": {
+          "mean": 0.07025329002644867,
+          "std": 0.002911389617142716
+        }
+      },
+      "track_building_total_per_event_s": 0.10384620670229197
+    },
+    {
+      "dataset": "data_60",
+      "multiplicity": 240,
+      "num_events": 10,
+      "avg_spacepoints": 2600.8,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.03853840208612382,
+          "std": 0.0006901499516988474
+        },
+        "track_match": {
+          "mean": 0.08575370528269559,
+          "std": 0.0037509892084362324
+        }
+      },
+      "track_building_total_per_event_s": 0.1242921073688194
+    },
+    {
+      "dataset": "data_70",
+      "multiplicity": 280,
+      "num_events": 10,
+      "avg_spacepoints": 3051.8,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.04538828043732792,
+          "std": 0.0013744342473564766
+        },
+        "track_match": {
+          "mean": 0.10215667937882245,
+          "std": 0.0027062327860442486
+        }
+      },
+      "track_building_total_per_event_s": 0.14754495981615037
+    },
+    {
+      "dataset": "data_80",
+      "multiplicity": 320,
+      "num_events": 10,
+      "avg_spacepoints": 3462.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.05030373800545931,
+          "std": 0.0009752336560738766
+        },
+        "track_match": {
+          "mean": 0.1157249656273052,
+          "std": 0.0033838799342951354
+        }
+      },
+      "track_building_total_per_event_s": 0.1660287036327645
+    },
+    {
+      "dataset": "data_90",
+      "multiplicity": 360,
+      "num_events": 10,
+      "avg_spacepoints": 3939.1,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.05627887602895498,
+          "std": 0.0034259731071977603
+        },
+        "track_match": {
+          "mean": 0.13291017217561601,
+          "std": 0.0036572421132158215
+        }
+      },
+      "track_building_total_per_event_s": 0.189189048204571
+    },
+    {
+      "dataset": "data_100",
+      "multiplicity": 400,
+      "num_events": 10,
+      "avg_spacepoints": 4327.9,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.07182078624609858,
+          "std": 0.032735462898333914
+        },
+        "track_match": {
+          "mean": 0.14823870160616934,
+          "std": 0.0046622991823283035
+        }
+      },
+      "track_building_total_per_event_s": 0.22005948785226792
+    },
+    {
+      "dataset": "data_110",
+      "multiplicity": 440,
+      "num_events": 10,
+      "avg_spacepoints": 4762.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.06543475708458572,
+          "std": 0.0013311656132194108
+        },
+        "track_match": {
+          "mean": 0.16421406806912273,
+          "std": 0.006047866916977337
+        }
+      },
+      "track_building_total_per_event_s": 0.22964882515370844
+    },
+    {
+      "dataset": "data_120",
+      "multiplicity": 480,
+      "num_events": 10,
+      "avg_spacepoints": 5230.7,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.07394380399491637,
+          "std": 0.004683529333569308
+        },
+        "track_match": {
+          "mean": 0.18306175640318542,
+          "std": 0.005157598802628136
+        }
+      },
+      "track_building_total_per_event_s": 0.2570055603981018
+    },
+    {
+      "dataset": "data_130",
+      "multiplicity": 520,
+      "num_events": 10,
+      "avg_spacepoints": 5670.7,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.07585344600956886,
+          "std": 0.0021703087321947915
+        },
+        "track_match": {
+          "mean": 0.19502008075360208,
+          "std": 0.003626491502780711
+        }
+      },
+      "track_building_total_per_event_s": 0.27087352676317095
+    },
+    {
+      "dataset": "data_140",
+      "multiplicity": 560,
+      "num_events": 10,
+      "avg_spacepoints": 6106.4,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.09204659746028483,
+          "std": 0.03407836987430958
+        },
+        "track_match": {
+          "mean": 0.21186181288212538,
+          "std": 0.0038320675700901836
+        }
+      },
+      "track_building_total_per_event_s": 0.30390841034241023
+    },
+    {
+      "dataset": "data_150",
+      "multiplicity": 600,
+      "num_events": 10,
+      "avg_spacepoints": 6565.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.08574094239156693,
+          "std": 0.0014299881301634138
+        },
+        "track_match": {
+          "mean": 0.2299969091778621,
+          "std": 0.005148703815299429
+        }
+      },
+      "track_building_total_per_event_s": 0.315737851569429
+    },
+    {
+      "dataset": "data_160",
+      "multiplicity": 640,
+      "num_events": 10,
+      "avg_spacepoints": 6944.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.08983178623020649,
+          "std": 0.0007323250035194077
+        },
+        "track_match": {
+          "mean": 0.2462289152899757,
+          "std": 0.005106466136229111
+        }
+      },
+      "track_building_total_per_event_s": 0.3360607015201822
+    },
+    {
+      "dataset": "data_170",
+      "multiplicity": 680,
+      "num_events": 10,
+      "avg_spacepoints": 7418.9,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.09492406661156565,
+          "std": 0.0012798567704154107
+        },
+        "track_match": {
+          "mean": 0.2761901071295142,
+          "std": 0.03357755539464998
+        }
+      },
+      "track_building_total_per_event_s": 0.37111417374107986
+    },
+    {
+      "dataset": "data_180",
+      "multiplicity": 720,
+      "num_events": 10,
+      "avg_spacepoints": 7843.0,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.09976042229682207,
+          "std": 0.0017408043188016482
+        },
+        "track_match": {
+          "mean": 0.2947620561579242,
+          "std": 0.027323796728274074
+        }
+      },
+      "track_building_total_per_event_s": 0.3945224784547463
+    },
+    {
+      "dataset": "data_190",
+      "multiplicity": 760,
+      "num_events": 10,
+      "avg_spacepoints": 8280.3,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.10637641544453799,
+          "std": 0.002656180366499789
+        },
+        "track_match": {
+          "mean": 0.30572166619822383,
+          "std": 0.006269727691617178
+        }
+      },
+      "track_building_total_per_event_s": 0.41209808164276185
+    },
+    {
+      "dataset": "data_200",
+      "multiplicity": 800,
+      "num_events": 10,
+      "avg_spacepoints": 8716.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.11309658933896571,
+          "std": 0.00695802083992921
+        },
+        "track_match": {
+          "mean": 0.33391947343479844,
+          "std": 0.03201428110142034
+        }
+      },
+      "track_building_total_per_event_s": 0.44701606277376416
+    }
+  ]
+}

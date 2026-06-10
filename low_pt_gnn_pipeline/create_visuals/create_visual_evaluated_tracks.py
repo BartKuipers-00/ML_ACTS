@@ -85,7 +85,7 @@ def load_track_building_graph(dataset_name, index):
     if not hasattr(graph, "hit_track_labels"):
         raise ValueError(
             f"Graph missing 'hit_track_labels'. Re-run track building:\n"
-            f"  python track_build_and_evaluate.py {dataset_name}"
+            f"  python helix_segmentmatcher_walkthrough.py {dataset_name}"
         )
     if not hasattr(graph, "hit_particle_id"):
         raise ValueError("Graph missing 'hit_particle_id'.")

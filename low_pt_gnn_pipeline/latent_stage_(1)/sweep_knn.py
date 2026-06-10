@@ -32,7 +32,7 @@ def run_test(checkpoint_path, knn, r_max, r_max_geometric=None, dr_same_layer_cu
     ]
     if r_max_geometric is not None:
         cmd += ["--r-max-geometric", str(r_max_geometric)]
-    cmd += ["--dr-same-layer-cut", str(dr_same_layer_cut or 0)]
+    cmd += ["--same-layer-cut", "geometry"]
     if num_events is not None:
         cmd += ["--num-events", str(num_events)]
     if segmented is not None:

@@ -32,6 +32,7 @@ sys.path.insert(0, str(WORKSPACE_ROOT / 'acorn'))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.stages.graph_construction.models.metric_learning import MetricLearning
+from acorn.stages.graph_construction.models.utils import graph_intersection
 from low_pt_custom_utils.graph_utils import build_edges, compute_edge_y  # proper KNN+radius (no FRNN needed)
 
 
@@ -119,6 +120,13 @@ class GraphDataset(Dataset):
         graph.hit_y = torch.tensor(y, dtype=torch.float32)
         graph.particle_id = hit_particle_ids
 
+        # Detector layer identity for the geometry-exact same-layer cut. Prefer baked pyg
+        # attrs (rebuilt graphs); fall back to the truth_df already loaded here.
+        if not hasattr(graph, 'hit_volume_id'):
+            graph.hit_volume_id = torch.tensor(truth_df['volume_id'].values, dtype=torch.long)
+        if not hasattr(graph, 'hit_layer_id'):
+            graph.hit_layer_id = torch.tensor(truth_df['layer_id'].values, dtype=torch.long)
+
         # Segment ID might not exist in older datasets - default to None
         if not hasattr(graph, 'hit_segment_id'):
             graph.segment_id = None
@@ -131,7 +139,7 @@ class GraphDataset(Dataset):
         return graph
 
 
-def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max=0.15, r_max_geometric=None, dr_same_layer_cut=None, segmented=True, one_in_one_out=False, node_scales=None):
+def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max=0.15, r_max_geometric=None, same_layer_cut="geometry", segmented=True, one_in_one_out=False, node_scales=None, compute_truth=True):
     """
     Build edges using TRUE batching - process all graphs simultaneously on GPU
 
@@ -141,9 +149,13 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
         node_features: List of feature names
         k_max: Maximum neighbors per hit
         r_max: Maximum radius in latent space
+        compute_truth: If True (default), also compute edge_y and track_to_edge_map
+            (needed for training/eval). Pass False at inference to skip them — they
+            are unused downstream and track_to_edge_map costs an O(K*M) loop.
 
     Returns:
-        graphs: List of graphs with edge_index, edge_y, and embeddings added
+        graphs: List of graphs with edge_index and embeddings added; also edge_y
+            and track_to_edge_map when compute_truth=True.
     """
     from torch_geometric.data import Batch
 
@@ -226,11 +238,29 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
             geo_mask = dist3d <= r_max_geometric
             graph_edges = graph_edges[:, geo_mask]
 
-        # Remove same-layer edges: hits with |Δr| < dr_same_layer_cut are on the same detector layer
-        if dr_same_layer_cut is not None:
+        # Remove same-layer edges by detector identity: two hits are on the same layer iff
+        # they share (volume_id, layer_id). Geometry-exact — unlike a |Δr| proxy it works for
+        # endcap disks (constant-z, span r) and removes 0 true edges (consecutive hits never
+        # share a layer). See compare_same_layer_cut.py.
+        if same_layer_cut == "geometry":
             src, dst = graph_edges
-            dr = torch.abs(graph.hit_r[src] - graph.hit_r[dst])
-            graph_edges = graph_edges[:, dr >= dr_same_layer_cut]
+            same_layer = (graph.hit_volume_id[src] == graph.hit_volume_id[dst]) & \
+                         (graph.hit_layer_id[src] == graph.hit_layer_id[dst])
+            graph_edges = graph_edges[:, ~same_layer]
+        elif same_layer_cut not in (None, "none", 0, 0.0, False):
+            # Backward-compatible |Δr| cut (mm), for graphs without baked (volume_id, layer_id)
+            # — e.g. the in-memory benchmark and older feature_store datasets. hit_r is raw mm.
+            thr = float(same_layer_cut)
+            src, dst = graph_edges
+            dr = (graph.hit_r[src] - graph.hit_r[dst]).abs()
+            graph_edges = graph_edges[:, dr >= thr]
+
+        graph.edge_index = graph_edges
+        graph.embeddings = embeddings.cpu()
+
+        if not compute_truth:        # inference: skip unused edge_y + track_to_edge_map
+            processed_graphs.append(graph)
+            continue
 
         # Compute edge truth labels
         particle_id = all_particle_ids[i]
@@ -244,44 +274,22 @@ def build_edges_latent_true_batch(model, graphs, node_features, k_max=500, r_max
             one_in_one_out=one_in_one_out,
         )
 
-        # Build track_to_edge_map (segment-aware if segment_id exists)
-        if segment_id is not None:
-            # Group by (particle_id, segment_id) — each segment is a separate track
-            composite_id = particle_id * 1000 + segment_id
-            composite_src = composite_id[graph_edges[0]]
-            composite_tgt = composite_id[graph_edges[1]]
-            unique_ids = composite_id.unique()
-            unique_ids = unique_ids[unique_ids > 0]  # Remove noise (pid=0 → composite=0)
-            num_tracks = len(unique_ids)
+        # track_to_edge_map (ACORN standard): 1-D, length = num track_edges. Entry i =
+        # index of true edge i in edge_index, or -1 if that true edge wasn't constructed.
+        # undirected=True matches the GNN's undirected config and compute_edge_y's
+        # undirected edge labelling. Consumed by the GNN stage's weighting (maps
+        # track-level attrs like track_particle_primary onto edges).
+        track_to_edge_map = graph_intersection(
+            graph_edges,
+            graph.track_edges,
+            return_y_pred=False,
+            return_truth_to_pred=True,
+            undirected=True,
+        )
 
-            track_to_edge_list = []
-            for cid in unique_ids:
-                track_edges = ((composite_src == cid) & (composite_tgt == cid)).nonzero(as_tuple=True)[0]
-                track_to_edge_list.append(track_edges)
-        else:
-            # Original behavior: group by particle_id only
-            unique_pids = particle_id.unique()
-            unique_pids = unique_pids[unique_pids > 0]
-            num_tracks = len(unique_pids)
-
-            track_to_edge_list = []
-            for pid in unique_pids:
-                track_edges = ((pid_src == pid) & (pid_tgt == pid)).nonzero(as_tuple=True)[0]
-                track_to_edge_list.append(track_edges)
-
-        if len(track_to_edge_list) > 0:
-            max_edges = max([len(te) for te in track_to_edge_list])
-            track_to_edge_map = torch.full((num_tracks, max_edges), -1, dtype=torch.long)
-            for j, track_edges in enumerate(track_to_edge_list):
-                track_to_edge_map[j, :len(track_edges)] = track_edges
-        else:
-            track_to_edge_map = torch.empty((0, 0), dtype=torch.long)
-
-        # Add to graph
-        graph.edge_index = graph_edges
+        # Add truth attributes (edge_index/embeddings already set above)
         graph.edge_y = edge_y
         graph.track_to_edge_map = track_to_edge_map
-        graph.embeddings = embeddings.cpu()
 
         processed_graphs.append(graph)
 
@@ -345,7 +353,7 @@ def run_graph_construction(model, hparams, config):
     k_max = config['k_max']
     r_max = config.get('r_max', 0.15)
     r_max_geometric = config.get('r_max_geometric', None)
-    dr_same_layer_cut = config.get('dr_same_layer_cut', None)
+    same_layer_cut = config.get('same_layer_cut', 'geometry')
     segmented = config.get('segmented', True)
     one_in_one_out = config.get('one_in_one_out', False)
     device = config.get('device', 'cpu')
@@ -370,7 +378,7 @@ def run_graph_construction(model, hparams, config):
     print(f"Max neighbors (KNN): {k_max}")
     print(f"Max radius (latent space): {r_max}")
     print(f"Max geometric distance (3D, mm): {r_max_geometric if r_max_geometric is not None else 'disabled'}")
-    print(f"Same-layer cut (dr, mm): {dr_same_layer_cut if dr_same_layer_cut is not None else 'disabled'}")
+    print(f"Same-layer cut: {same_layer_cut}")
     print(f"Device: {device}")
     print(f"Node features: {node_features}")
     print(f"Num workers: {num_workers}")
@@ -436,7 +444,7 @@ def run_graph_construction(model, hparams, config):
             for batch_graphs in pbar:
                 # Process batch on GPU with TRUE batching
                 processed_graphs = build_edges_latent_true_batch(
-                    model, batch_graphs, node_features, k_max, r_max, r_max_geometric, dr_same_layer_cut,
+                    model, batch_graphs, node_features, k_max, r_max, r_max_geometric, same_layer_cut,
                     segmented=segmented, one_in_one_out=one_in_one_out, node_scales=node_scales,
                 )
 

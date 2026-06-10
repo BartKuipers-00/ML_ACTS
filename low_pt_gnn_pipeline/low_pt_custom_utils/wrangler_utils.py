@@ -89,24 +89,15 @@ def _wrangler_walk(root, adj):
 
 
 def _wrangler_disentangle_cluster(hit_indices, src_arr, dst_arr, scores_arr,
-                                   r_coords, x, y, z):
+                                   r_coords, x, y, z, R3d):
     """
-    Run Wrangler on a single CC cluster.
-
-    Steps:
-      1. Build directed graph (radially outward) within the cluster.
-      2. Find source nodes (in-degree == 0); fall back to innermost-R3d node.
-      3. Run Wrangler walk (greedy) from each source.
-      4. Assign hits greedily to paths (longest wins on conflict).
-      5. Any unassigned hits become a leftover segment.
+    Run Wrangler on a single CC cluster. src/dst/scores are this cluster's edges
+    only; R3d is the event-wide 3D distance array (precomputed once).
 
     Returns:
         List of SegmentInfo objects (one per disentangled path / leftover group).
     """
     hit_set = set(hit_indices.tolist())
-
-    # 3D distance from origin for edge orientation (matches ACORN remove_cycles)
-    R3d = r_coords**2 + z**2
 
     adj = _build_directed_adj(hit_set, src_arr, dst_arr, scores_arr, R3d)
 
@@ -195,17 +186,34 @@ def extract_segments_with_wrangler(graph, score_cut):
     labels[node_mask] = torch.tensor(labels_compact, dtype=torch.long)
     labels = labels.numpy()
 
+    R3d = r**2 + z**2  # once per event
+
+    # Bucket edges by cluster (both endpoints share a component -> labels[src])
+    edge_cluster = labels[src_arr]
+    eorder = np.argsort(edge_cluster, kind="stable")
+    src_s, dst_s, sc_s = src_arr[eorder], dst_arr[eorder], scores_filtered[eorder]
+    e_ends = np.cumsum(np.bincount(edge_cluster, minlength=n_components))
+    e_starts = e_ends - np.bincount(edge_cluster, minlength=n_components)
+
+    # Bucket nodes by cluster
+    node_idx = np.where(labels >= 0)[0]
+    norder = np.argsort(labels[node_idx], kind="stable")
+    node_idx_s = node_idx[norder]
+    n_ends = np.cumsum(np.bincount(labels[node_idx], minlength=n_components))
+    n_starts = n_ends - np.bincount(labels[node_idx], minlength=n_components)
+
     segments = []
     n_wrangler_splits = 0
 
     for cluster_id in range(n_components):
-        hit_indices = np.where(labels == cluster_id)[0]
+        hit_indices = node_idx_s[n_starts[cluster_id]:n_ends[cluster_id]]
         if len(hit_indices) < 1:
             continue
 
+        es = slice(e_starts[cluster_id], e_ends[cluster_id])
         cluster_segs = _wrangler_disentangle_cluster(
-            hit_indices, src_arr, dst_arr, scores_filtered,
-            r, x, y, z,
+            hit_indices, src_s[es], dst_s[es], sc_s[es],
+            r, x, y, z, R3d,
         )
 
         if len(cluster_segs) > 1:

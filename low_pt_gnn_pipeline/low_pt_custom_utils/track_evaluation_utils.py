@@ -21,6 +21,7 @@ import pandas as pd
 import scipy.stats
 import torch
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 from tqdm import tqdm
 
 # Import ACORN utilities
@@ -494,6 +495,13 @@ def _get_bins(var, varconf):
             return np.linspace(-4, 4, n_bins)
 
 
+def _add_pt_minor_grid(ax, var):
+    """Faint grid lines every 0.05 GeV on the pT axis (no extra tick labels)."""
+    if var == 'pt':
+        ax.xaxis.set_minor_locator(MultipleLocator(0.05))
+        ax.grid(True, which='minor', axis='x', alpha=0.15)
+
+
 def _get_species_list(df):
     """Get sorted list of species present in the DataFrame."""
     if 'particle_type' not in df.columns:
@@ -580,6 +588,7 @@ def plot_efficiency_vs_variable(particles_df, var, varconf, output_path, summary
     ax.set_ylim(varconf.get('y_lim', [0, 1.1]))
     ax.tick_params(axis='both', labelsize=font_sizes['tick_label'])
     ax.grid(True, alpha=0.3)
+    _add_pt_minor_grid(ax, var)
     ax.legend(fontsize=font_sizes['legend'])
     if summary:
         ax.set_title(title, fontsize=font_sizes['title'])
@@ -671,6 +680,7 @@ def plot_clone_rate_vs_variable(matching_df, var, varconf, output_path, summary=
     ax.set_ylim([0, 1.1])
     ax.tick_params(axis='both', labelsize=font_sizes['tick_label'])
     ax.grid(True, alpha=0.3)
+    _add_pt_minor_grid(ax, var)
     ax.legend(fontsize=font_sizes['legend'])
     ax.set_title(title, fontsize=font_sizes['title'])
     plt.tight_layout()
@@ -761,6 +771,7 @@ def _plot_binned_mean_vs_variable(matching_df, var, varconf, value_col, output_p
     ax.set_ylim([0, 1.1])
     ax.tick_params(axis='both', labelsize=font_sizes['tick_label'])
     ax.grid(True, alpha=0.3)
+    _add_pt_minor_grid(ax, var)
     ax.legend(fontsize=font_sizes['legend'])
     ax.set_title(title, fontsize=font_sizes['title'])
     plt.tight_layout()
@@ -810,7 +821,10 @@ def run_plotting(evaluated_events, summary, dataset_name, output_dir, plot_confi
 
     # Load particles for efficiency plots
     particles = evaluated_events[evaluated_events["is_reconstructable"]].copy()
-    # A particle is reconstructed if ANY of its matching rows has is_reconstructed=True
+    # A particle is reconstructed if ANY of its matching rows is_reconstructed AND
+    # the reconstructing track is matchable (>= min_track_length hits) -- a sub-7-hit
+    # track that clears the purity/completeness cut does NOT count (matches summary stat).
+    particles["is_reconstructed"] = particles["is_reconstructed"] & particles["is_matchable"]
     particles["is_reconstructed"] = particles.groupby(
         ["event_id", "particle_id"]
     )["is_reconstructed"].transform("any")

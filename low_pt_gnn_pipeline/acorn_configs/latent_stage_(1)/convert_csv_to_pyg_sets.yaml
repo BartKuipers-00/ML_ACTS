@@ -13,7 +13,7 @@ input_dir: data/csv/                        # ACTS CSV files
 stage_dir: data/feature_store/              # Output PyG graphs
 
 # Data split [train, val, test]
-data_split: [10000, 1000, 1000]
+data_split: [10, 0, 0]
 # Which datasets to process
 input_sets: [trainset, valset, testset]
 # ACTS-specific settings
@@ -33,24 +33,39 @@ feature_sets:
     - hit_eta
     - hit_particle_id
     - hit_region
+    - hit_volume_id  # Detector volume — for geometry-exact same-layer cut
+    - hit_layer_id   # Detector layer — same-layer ⟺ same (volume, layer)
     - hit_t  # Time - needed for trajectory ordering of looping particles
     - hit_segment_id  # Segment label (1,2,3,...) for radial arcs; 0 for noise
   track_features:
     - track_particle_id
-    - track_particle_type  # PDG code (13=muon, 211=pion, 11=electron) 
+    - track_particle_type  # PDG code (13=muon, 211=pion, 11=electron)
     - track_particle_pt
     - track_particle_radius
     - track_particle_nhits
     - track_particle_eta
+    - track_particle_primary  # 1=primary, 0=secondary (ACTS isSecondary() convention)
 
-# Region labels (assign hits to detector regions)
-region_labels:
-  1: {volume_id: [7, 9]}    # Pixel endcap
-  2: {volume_id: 8}         # Pixel barrel
-  3: {volume_id: [12, 14]}  # ShortStrip endcap
-  4: {volume_id: 13}        # ShortStrip barrel
-  5: {volume_id: [16, 18]}  # LongStrip endcap
-  6: {volume_id: 17}        # LongStrip barrel
+# Region labels — one map per detector geometry. The convert entry points select one via
+# `--detector {generic, odd}` (see resolve_region_labels); the chosen map is assigned to
+# `region_labels` at runtime and consumed by add_region_labels().
+region_labels_by_detector:
+  # GenericDetector (FATRAS) volume numbering
+  generic:
+    1: {volume_id: [7, 9]}    # Pixel endcap
+    2: {volume_id: 8}         # Pixel barrel
+    3: {volume_id: [12, 14]}  # ShortStrip endcap
+    4: {volume_id: 13}        # ShortStrip barrel
+    5: {volume_id: [16, 18]}  # LongStrip endcap
+    6: {volume_id: 17}        # LongStrip barrel
+  # OpenDataDetector (ODD / Geant4) volume numbering
+  odd:
+    1: {volume_id: [16, 18]}  # Pixel endcap
+    2: {volume_id: 17}        # Pixel barrel
+    3: {volume_id: [23, 25]}  # ShortStrip endcap
+    4: {volume_id: 24}        # ShortStrip barrel
+    5: {volume_id: [28, 30]}  # LongStrip endcap
+    6: {volume_id: 29}        # LongStrip barrel
 
 # Processing
 max_workers: 16                             # 1 = disable multiprocessing (NumPy 2.x compatibility issue)

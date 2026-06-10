@@ -5,7 +5,7 @@ Evaluate metric learning (latent cluster learning) model on test set
 Computes TP, FP, TN, FN and other metrics for graph construction performance.
 
 Example:
-    python test_my_latent_model.py saved_models/low_pt_latentmodel_100_mixed_f1=0.2752.ckpt --num-events 20 --dr-same-layer-cut 10 --knn 200 --r-max 0.4 --r-max-geometric 500 
+    python test_my_latent_model.py saved_models/low_pt_latentmodel_100_mixed_f1=0.2752.ckpt --num-events 20 --dr-same-layer-cut 10 --knn 200 --r-max 0.4 --r-max-geometric 500 --primary-only
 """
 
 #low_pt_latentmodel_val_loss_val_loss=0.0074.ckpt
@@ -27,8 +27,7 @@ sys.path.insert(0, str(WORKSPACE_ROOT / 'acorn'))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.stages.graph_construction.models.metric_learning import MetricLearning
-from acorn.stages.graph_construction.models.utils import graph_intersection
-from low_pt_custom_utils.graph_utils import build_edges  # proper KNN+radius (no FRNN needed)
+from low_pt_custom_utils.graph_utils import build_edges, edge_truth_labels  # KNN + fast truth match
 from acorn.stages.graph_construction.graph_construction_stage import EventDataset
 
 
@@ -40,7 +39,16 @@ def load_model(checkpoint_path):
     
     # Extract hyperparameters
     hparams = checkpoint['hyper_parameters']
-    
+
+    # node_scales must be saved in the checkpoint so test normalization matches
+    # training exactly. No fallback: a missing value would silently mis-normalize.
+    if "node_scales" not in hparams:
+        raise KeyError(
+            f"'node_scales' not found in checkpoint hyper_parameters of {checkpoint_path}. "
+            "Cannot determine the normalization used at training time. "
+            "Retrain with node_scales in the config, or test a checkpoint that stored it."
+        )
+
     print(f"  Model architecture:")
     print(f"    Input features: {hparams['node_features']}")
     print(f"    Hidden layers: {hparams['nb_layer']} x {hparams['emb_hidden']}")
@@ -79,7 +87,18 @@ def build_particle_only_edges(batch):
     return torch.cat(edges, dim=1)
 
 
-def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geometric=None, dr_same_layer_cut=None, segmented=True, device='cpu'):
+def primary_hit_mask(batch):
+    """Per-hit bool: True if the hit's particle is primary. Noise hits -> False."""
+    pid = batch.hit_particle_id.long()
+    tpid = batch.track_particle_id.long()
+    tprim = batch.track_particle_primary.bool()
+    order = torch.argsort(tpid)
+    s_ids, s_prim = tpid[order], tprim[order]
+    idx = torch.searchsorted(s_ids, pid).clamp(max=s_ids.numel() - 1)
+    return s_prim[idx] & (s_ids[idx] == pid)  # exact-match guard
+
+
+def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geometric=None, same_layer_cut="geometry", segmented=True, device='cpu', primary_only=False):
     """
     Evaluate metric learning model on test set
     
@@ -108,14 +127,18 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
     total_pred_edges = 0
     total_true_edges = 0
     total_nodes = 0
-    
+    # Primary-only confusion (secondary true edges treated as don't-care)
+    total_tp_p = 0
+    total_fp_p = 0
+    total_fn_p = 0
+    total_true_edges_p = 0
+
     # Per-event metrics for analysis
     event_metrics = []
     
     print(f"Evaluating on {len(testset)} test events...")
     geo_str = f"{r_max_geometric} mm" if r_max_geometric is not None else "disabled"
-    layer_str = f"{dr_same_layer_cut} mm" if dr_same_layer_cut else "disabled"
-    print(f"Graph construction parameters: r_max={r_max}, k_max={knn_max}, r_max_geometric={geo_str}, dr_same_layer_cut={layer_str}")
+    print(f"Graph construction parameters: r_max={r_max}, k_max={knn_max}, r_max_geometric={geo_str}, same_layer_cut={same_layer_cut}")
     print(f"segmented={segmented}  ({'cross-segment edges count as false' if segmented else 'cross-segment same-particle edges count as true'})")
     print()
     
@@ -142,7 +165,7 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
             # unscale hit_z by node_scales[2] (typically 500).
             if r_max_geometric is not None:
                 src, dst = pred_edges
-                node_scales = hparams.get("node_scales", [1000.0, 3.14, 500.0])
+                node_scales = hparams["node_scales"]
                 hit_x = batch.hit_x.float()
                 hit_y = batch.hit_y.float()
                 hit_z_mm = batch.hit_z.float() * node_scales[2]
@@ -152,13 +175,18 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
                 dist3d = torch.sqrt(dx**2 + dy**2 + dz**2)
                 pred_edges = pred_edges[:, dist3d <= r_max_geometric]
 
-            # Remove same-layer edges: hits with |Δr| < dr_same_layer_cut are on the same detector layer
-            if dr_same_layer_cut:
+            # Remove same-layer edges by detector identity: same layer iff same (volume_id,
+            # layer_id). Geometry-exact (works for endcap disks); removes 0 true edges.
+            if same_layer_cut == "geometry":
+                if not hasattr(batch, "hit_volume_id"):
+                    raise AttributeError(
+                        "same_layer_cut='geometry' needs hit_volume_id/hit_layer_id on the graph. "
+                        "Rebuild the feature store with these in hit_features (convert_csv_to_pyg_sets.yaml)."
+                    )
                 src, dst = pred_edges
-                node_scales = hparams.get("node_scales", [1000.0, 3.14, 500.0])
-                hit_r_mm = batch.hit_r.float() * node_scales[0]
-                dr = torch.abs(hit_r_mm[src] - hit_r_mm[dst])
-                pred_edges = pred_edges[:, dr >= dr_same_layer_cut]
+                same_layer = (batch.hit_volume_id[src] == batch.hit_volume_id[dst]) & \
+                             (batch.hit_layer_id[src] == batch.hit_layer_id[dst])
+                pred_edges = pred_edges[:, ~same_layer]
 
             # Get truth edges from batch
             # If segmented=False, rebuild edges to span segment boundaries
@@ -172,13 +200,12 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
             true_edges_unique = torch.unique(true_edges, dim=1)
             num_unique_true_edges = len(true_edges_unique[0])
             
-            # Compute intersection to get truth labels for predicted edges
-            pred_edges, edge_y, track_to_edge_map = graph_intersection(
+            # Truth-label predicted edges. Fast int-key dedup+match (identical result to acorn's
+            # graph_intersection, but ~20x faster on CPU — avoids its torch.unique(dim=1)).
+            pred_edges, edge_y = edge_truth_labels(
                 pred_edges,
                 true_edges,
-                return_y_pred=True,
-                return_truth_to_pred=True,
-                unique_pred=False,
+                num_nodes=embedding.shape[0],
                 undirected=hparams.get("undirected", False),
             )
             
@@ -220,9 +247,8 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
             
             total_possible_edges = num_nodes_val * (num_nodes_val - 1) // 2
             
-            # Edges we created (unique)
-            pred_edges_unique = torch.unique(pred_edges, dim=1)
-            num_pred_edges_unique = len(pred_edges_unique[0])
+            # Edges we created (pred_edges already deduped by edge_truth_labels)
+            num_pred_edges_unique = pred_edges.shape[1]
             
             # False edges that exist (should not be connected)
             # Total false edges = total_possible - true_edges
@@ -234,7 +260,28 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
             tn = max(0, total_false_edges - fp)  # Ensure non-negative
             
             fn = num_unique_true_edges - tp  # True edges not in our prediction
-            
+
+            # Primary-only: drop secondary true edges (don't-care, trained at weight 0)
+            if primary_only:
+                prim = primary_hit_mask(batch)
+                true_edges_p = true_edges[:, prim[true_edges[0]]]
+                num_true_p = torch.unique(true_edges_p, dim=1).shape[1]
+                _, edge_y_p = edge_truth_labels(
+                    pred_edges, true_edges_p, num_nodes=embedding.shape[0],
+                    undirected=hparams.get("undirected", False),
+                )
+                tp_pred = pred_edges[:, edge_y_p.cpu().numpy().astype(bool)]
+                if tp_pred.shape[1] > 0:
+                    canon = torch.stack([tp_pred.min(0)[0], tp_pred.max(0)[0]])
+                    tp_p = torch.unique(canon, dim=1).shape[1]
+                else:
+                    tp_p = 0
+                fp_p = int(np.sum(~edge_y_np))  # secondary-true preds excluded (edge_y True)
+                total_tp_p += tp_p
+                total_fp_p += fp_p
+                total_fn_p += num_true_p - tp_p
+                total_true_edges_p += num_true_p
+
             # Accumulate
             total_tp += tp
             total_fp += fp
@@ -278,7 +325,17 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
     recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
+    primary = None
+    if primary_only:
+        prec_p = total_tp_p / (total_tp_p + total_fp_p) if (total_tp_p + total_fp_p) > 0 else 0.0
+        rec_p = total_tp_p / (total_tp_p + total_fn_p) if (total_tp_p + total_fn_p) > 0 else 0.0
+        primary = {
+            'tp': total_tp_p, 'fp': total_fp_p, 'fn': total_fn_p,
+            'true_edges': total_true_edges_p, 'precision': prec_p, 'recall': rec_p,
+        }
+
     return {
+        'primary': primary,
         'total_tp': total_tp,
         'total_fp': total_fp,
         'total_tn': total_tn,
@@ -294,7 +351,7 @@ def evaluate_model(model, hparams, testset, knn_max=50, r_max=0.15, r_max_geomet
     }
 
 
-def print_results(metrics, knn_max, r_max, r_max_geometric=None, dr_same_layer_cut=None, segmented=True):
+def print_results(metrics, knn_max, r_max, r_max_geometric=None, same_layer_cut="geometry", segmented=True):
     """Print evaluation results in a formatted way"""
     print("\n" + "="*80)
     print("EVALUATION RESULTS")
@@ -304,8 +361,7 @@ def print_results(metrics, knn_max, r_max, r_max_geometric=None, dr_same_layer_c
     print(f"  k_max: {knn_max}")
     geo_str = f"{r_max_geometric} mm" if r_max_geometric is not None else "disabled"
     print(f"  r_max_geometric: {geo_str}")
-    layer_str = f"{dr_same_layer_cut} mm" if dr_same_layer_cut is not None else "disabled"
-    print(f"  dr_same_layer_cut: {layer_str}")
+    print(f"  same_layer_cut: {same_layer_cut}")
     print(f"  segmented: {segmented}  ({'within-segment edges only' if segmented else 'cross-segment same-particle edges are true'})")
     print()
     # Calculate average connections per node
@@ -335,6 +391,19 @@ def print_results(metrics, knn_max, r_max, r_max_geometric=None, dr_same_layer_c
     print(f"  Recall:     {metrics['recall']:.6f} ({metrics['recall']*100:.2f}%)")
     print(f"              TP / (TP + FN) = {metrics['total_tp']:,} / {metrics['total_tp'] + metrics['total_fn']:,}")
     print()
+
+    # Primary-only vs inclusive comparison (secondary true edges excluded)
+    p = metrics.get('primary')
+    if p is not None:
+        n_sec = metrics['total_true_edges'] - p['true_edges']
+        print("="*80)
+        print("PRIMARY-ONLY ")
+        print("="*80)
+        print(f"  Secondary true edges excluded: {n_sec:,} of {metrics['total_true_edges']:,}")
+        print(f"  Recall:    {p['recall']*100:.2f}%  (inclusive: {metrics['recall']*100:.2f}%, "
+              f"Δ {(p['recall']-metrics['recall'])*100:+.2f})")
+        print(f"  Precision: {p['precision']*100:.4f}%  (inclusive: {metrics['precision']*100:.4f}%)")
+        print()
     print("="*80)
     
     # Per-event statistics
@@ -386,10 +455,11 @@ Examples:
         help='Maximum 3D Euclidean distance (mm) between connected hits; applied after KNN (default: from graph_construction_latent.yaml)'
     )
     parser.add_argument(
-        '--dr-same-layer-cut',
-        type=float,
+        '--same-layer-cut',
+        type=str,
         default=None,
-        help='Remove edges between hits with |Δr| < this threshold (mm); 0 or omit to disable (default: from graph_construction_latent.yaml)'
+        choices=['geometry', 'none'],
+        help="Same-layer edge removal: 'geometry' = drop edges sharing (volume_id, layer_id); 'none' = disabled (default: from graph_construction_latent.yaml)"
     )
     parser.add_argument(
         '--segmented',
@@ -403,6 +473,11 @@ Examples:
         type=int,
         default=None,
         help='Number of test events to evaluate (default: all events in testset as defined by data_split in config)'
+    )
+    parser.add_argument(
+        '--primary-only',
+        action='store_true',
+        help='Also report recall/precision with secondary true edges excluded (weight-0 in training)'
     )
     parser.add_argument(
         '--config',
@@ -488,7 +563,7 @@ Examples:
     knn_max           = args.knn                if args.knn                is not None else graph_config.get('k_max', 1000)
     r_max             = args.r_max              if args.r_max              is not None else graph_config.get('r_max', 0.15)
     r_max_geo         = args.r_max_geometric    if args.r_max_geometric    is not None else graph_config.get('r_max_geometric', None)
-    dr_same_layer_cut = args.dr_same_layer_cut  if args.dr_same_layer_cut  is not None else graph_config.get('dr_same_layer_cut', None)
+    same_layer_cut    = args.same_layer_cut     if args.same_layer_cut     is not None else graph_config.get('same_layer_cut', 'geometry')
     segmented         = args.segmented          if args.segmented          is not None else graph_config.get('segmented', True)
 
     # Setup dataset - path is relative to pipeline root
@@ -531,13 +606,14 @@ Examples:
         knn_max=knn_max,
         r_max=r_max,
         r_max_geometric=r_max_geo,
-        dr_same_layer_cut=dr_same_layer_cut,
+        same_layer_cut=same_layer_cut,
         segmented=segmented,
         device=device,
+        primary_only=args.primary_only,
     )
 
     # Print results
-    print_results(metrics, knn_max, r_max, r_max_geo, dr_same_layer_cut=dr_same_layer_cut, segmented=segmented)
+    print_results(metrics, knn_max, r_max, r_max_geo, same_layer_cut=same_layer_cut, segmented=segmented)
     
     print("✓ Evaluation complete!")
 

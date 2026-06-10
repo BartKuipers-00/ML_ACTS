@@ -20,13 +20,22 @@ sys.path.insert(0, str(WORKSPACE_ROOT / 'acorn'))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acts_custom_low_pt_reader import ActsCustomLowPTReader
+from low_pt_custom_utils.region_label_utils import VALID_DETECTORS
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--chunk', type=int, required=True, help='Chunk number (0-indexed)')
     parser.add_argument('--total-chunks', type=int, required=True, help='Total number of chunks')
+    parser.add_argument('--detector', type=str, default=None, choices=list(VALID_DETECTORS),
+                        help="Detector geometry selecting the region map (generic=FATRAS, "
+                             "odd=Geant4/ODD). Prompts if omitted in an interactive shell.")
     parser.add_argument('--config', type=str, default='acorn_configs/latent_stage_(1)/convert_csv_to_pyg_sets.yaml')
+    parser.add_argument('--input-dir', type=str, default=None,
+                        help='Override input_dir (CSV source). detector_path is set to '
+                             '<input-dir>/detectors.csv. Default: value from config.')
+    parser.add_argument('--stage-dir', type=str, default=None,
+                        help='Override output stage_dir. Default: data/feature_store_chunk{NN}/.')
     args = parser.parse_args()
     
     print("="*70)
@@ -37,7 +46,15 @@ def main():
     config_path = PIPELINE_ROOT / args.config
     with open(config_path) as f:
         config = yaml.safe_load(f)
-    
+
+    # Detector selects the region map (resolved in ActsCustomLowPTReader)
+    config['detector'] = args.detector
+
+    # Optional directory overrides (used by the geant clean+convert flow)
+    if args.input_dir is not None:
+        config['input_dir'] = args.input_dir
+        config['detector_path'] = str(Path(args.input_dir) / "detectors.csv")
+
     # Calculate event range for this chunk based on actual CSV files present
     input_dir = config['input_dir']
     if not Path(input_dir).is_absolute():
@@ -59,15 +76,19 @@ def main():
         end_event = start_event + events_per_chunk
     
     chunk_size = end_event - start_event
-    
+
+    stage_dir = args.stage_dir if args.stage_dir is not None \
+        else f"data/feature_store_chunk{args.chunk:02d}/"
+
+    print(f"Input:  {input_dir}")
     print(f"Processing events: {start_event} to {end_event-1} ({chunk_size} events)")
-    print(f"Output: data/feature_store_chunk{args.chunk:02d}/")
+    print(f"Output: {stage_dir}")
     print()
-    
+
     # Modify config for this chunk
     config['data_split'] = [chunk_size, 0, 0]  # All in trainset
     config['input_sets'] = ['trainset']
-    config['stage_dir'] = f"data/feature_store_chunk{args.chunk:02d}/"
+    config['stage_dir'] = stage_dir
     
     # Override the dataset to only include our event range
     config['event_range'] = [start_event, end_event]

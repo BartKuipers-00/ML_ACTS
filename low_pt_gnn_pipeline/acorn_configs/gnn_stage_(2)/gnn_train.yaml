@@ -1,8 +1,8 @@
 
 # Paths are relative to low_pt_gnn_pipeline directory
-input_dir: data/graph_constructed_latent_tsmear_0ps
+input_dir: data/graph_constructed_latent
 stage_dir: data/gnn_stage/ 
-project: GNN_gridsearch_400_pions
+project: GNN_gridsearch_geant_300_mixed
 accelerator: cuda      #cpu vs cuda 
 devices: 1             
 nodes: 1
@@ -12,23 +12,24 @@ use_wandb: true  # Enable W&B tracking
 wandb_entity: bart_kuipers-nikhef  # W&B entity/username
 wandb_log_every_n_batches: 50
 
-data_split: [10000, 500, 1000]  # [training, validation, testing]
+data_split: [12500, 200, 200]  # [training, validation, testing]
 
 # Model architecture parameters
 edge_cut: 0.5  # Threshold for edge classification (0-1)
 undirected: true
 undirected_message_passing: true
 #node_features: [hit_r, hit_phi, hit_z, hit_t_smeared] 
-node_features: [hit_r, hit_phi, hit_z, hit_t_smeared, hit_has_time]
-node_scales: [1000, 3.14159265359, 500, 4000, 1]
+# node_features: [hit_r, hit_phi, hit_z, hit_t_smeared, hit_has_time]
+node_features: [hit_r, hit_phi, hit_z]
+node_scales: [1000, 3.14159265359, 1200]
 
-hidden: 256 # 128 
+hidden: 128 
 n_graph_iters: 8 #  8
 nb_node_layer: 3
 nb_edge_layer: 3
 layernorm: true
 batchnorm: true
-aggregation: [sum, mean, max, std]  # Aggregation methods  in message 
+aggregation: [sum, mean]  # Aggregation methods  in message 
 hidden_activation: SiLU
 output_activation: Tanh
 
@@ -37,13 +38,27 @@ output_activation: Tanh
 num_workers: [8, 8, 0]        # Workers [train, val, test] 8 seems fine for this gpu for now
 scheduler: ReduceLROnPlateau  # Reduce LR only when val_loss doesn't improve
 check_val_every_n_epoch: 1  # Run validation every N epochs
-accumulate_grad_batches: 1 # Effective batch size: accumulate gradients over N graphs before weight update
+accumulate_grad_batches: 1  # Effective batch size: accumulate gradients over N graphs before weight update
 
 max_epochs: 15
 warmup: 1          #lineair increse from o to lr over warup epoch
 lr: 0.001          # ~ 0.001
 factor: 0.8
 patience: 0     # Reduce LR after val_loss hasn't improved for this many partial epochs
-early_stopping_patience: 6  # Stop training after val_loss hasn't improved for this many partial epochs
+early_stopping_patience: 4  # Stop training after val_loss hasn't improved for this many partial epochs
 
-val_check_interval: 0.5
+val_check_interval: 0.1
+
+# Edge weighting (BCE)
+weighting:
+  - weight: 1.0
+    conditions:
+      edge_y: False
+  - weight: 5.0
+    conditions:
+      edge_y: True
+      track_particle_primary: True
+  - weight: 0.0
+    conditions:
+      edge_y: True
+      track_particle_primary: False

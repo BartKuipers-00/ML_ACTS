@@ -1,0 +1,1076 @@
+{
+  "meta": {
+    "matcher": "helix",
+    "device": "cpu",
+    "host": "stbc-i1.nikhef.nl",
+    "cpu": "AMD EPYC 7551P 32-Core Processor",
+    "gpu": null,
+    "cpu_threads": 1,
+    "max_events": 10,
+    "input": "gnn_stage",
+    "score_cut": 0.4,
+    "use_wrangler": true
+  },
+  "records": [
+    {
+      "dataset": "data_10",
+      "multiplicity": 40,
+      "num_events": 10,
+      "avg_spacepoints": 428.9,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.002158857206813991,
+          "std": 0.00023625783747123954
+        },
+        "track_fit": {
+          "mean": 0.0006245643133297562,
+          "std": 5.379666758776459e-05
+        },
+        "track_match": {
+          "mean": 0.00023880258668214084,
+          "std": 9.468550190532417e-06
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 5.714711733162403e-06,
+          "std": 2.3698975917172093e-06
+        },
+        "track_score": {
+          "mean": 0.00022422918118536472,
+          "std": 8.870926880829609e-06
+        }
+      },
+      "track_building_total_per_event_s": 0.003022224106825888
+    },
+    {
+      "dataset": "data_20",
+      "multiplicity": 80,
+      "num_events": 10,
+      "avg_spacepoints": 869.3,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.009248784417286516,
+          "std": 0.0014445125096007932
+        },
+        "track_fit": {
+          "mean": 0.0018482494866475462,
+          "std": 0.00019369372565046167
+        },
+        "track_match": {
+          "mean": 0.0007009580731391907,
+          "std": 0.00021525373846991526
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 2.8110877610743046e-05,
+          "std": 5.449984745356745e-06
+        },
+        "track_score": {
+          "mean": 0.00065742211882025,
+          "std": 0.00020886375361652367
+        }
+      },
+      "track_building_total_per_event_s": 0.011797991977073253
+    },
+    {
+      "dataset": "data_30",
+      "multiplicity": 120,
+      "num_events": 10,
+      "avg_spacepoints": 1298.2,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.0164343792013824,
+          "std": 0.0007709883012287999
+        },
+        "track_fit": {
+          "mean": 0.001920153759419918,
+          "std": 7.10159396262552e-05
+        },
+        "track_match": {
+          "mean": 0.0013654644833877682,
+          "std": 0.00017894716693759777
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 4.377411678433418e-05,
+          "std": 3.855559864634231e-06
+        },
+        "track_score": {
+          "mean": 0.0012991038849577308,
+          "std": 0.00017494076823573713
+        }
+      },
+      "track_building_total_per_event_s": 0.019719997444190084
+    },
+    {
+      "dataset": "data_40",
+      "multiplicity": 160,
+      "num_events": 10,
+      "avg_spacepoints": 1746.5,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.023465293273329735,
+          "std": 0.001955057402041429
+        },
+        "track_fit": {
+          "mean": 0.0023522497853264213,
+          "std": 0.00019431170019884616
+        },
+        "track_match": {
+          "mean": 0.0020925565855577587,
+          "std": 0.0003646999648759438
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 6.437490228563547e-05,
+          "std": 1.8945659144530074e-05
+        },
+        "track_score": {
+          "mean": 0.0020001512486487625,
+          "std": 0.00035510934808483785
+        }
+      },
+      "track_building_total_per_event_s": 0.027910099644213916
+    },
+    {
+      "dataset": "data_50",
+      "multiplicity": 200,
+      "num_events": 10,
+      "avg_spacepoints": 2140.0,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.027675206284038724,
+          "std": 0.0006151500917576433
+        },
+        "track_fit": {
+          "mean": 0.002615097374655306,
+          "std": 5.611571028723123e-05
+        },
+        "track_match": {
+          "mean": 0.0026006102794781326,
+          "std": 0.0004074696923715792
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 7.209242321550846e-05,
+          "std": 7.029485687833333e-06
+        },
+        "track_score": {
+          "mean": 0.0024979855632409455,
+          "std": 0.0003988002433886175
+        }
+      },
+      "track_building_total_per_event_s": 0.032890913938172166
+    },
+    {
+      "dataset": "data_60",
+      "multiplicity": 240,
+      "num_events": 10,
+      "avg_spacepoints": 2600.8,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.03373428261838853,
+          "std": 0.0008659015096131672
+        },
+        "track_fit": {
+          "mean": 0.0031301720533519982,
+          "std": 0.00010259077335948868
+        },
+        "track_match": {
+          "mean": 0.0040467051090672616,
+          "std": 0.0013335318612942768
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.00010218108072876931,
+          "std": 2.8977062218475506e-05
+        },
+        "track_score": {
+          "mean": 0.003900636686012149,
+          "std": 0.0013045483719419841
+        }
+      },
+      "track_building_total_per_event_s": 0.04091115978080779
+    },
+    {
+      "dataset": "data_70",
+      "multiplicity": 280,
+      "num_events": 10,
+      "avg_spacepoints": 3051.8,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.03967357496730983,
+          "std": 0.0007527898681435816
+        },
+        "track_fit": {
+          "mean": 0.0035749760223552584,
+          "std": 9.48824508309621e-05
+        },
+        "track_match": {
+          "mean": 0.0055272749857977034,
+          "std": 0.00098904461735334
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.00015998068265616895,
+          "std": 3.067574733425279e-05
+        },
+        "track_score": {
+          "mean": 0.005313984258100391,
+          "std": 0.000978459859557193
+        }
+      },
+      "track_building_total_per_event_s": 0.048775825975462796
+    },
+    {
+      "dataset": "data_80",
+      "multiplicity": 320,
+      "num_events": 10,
+      "avg_spacepoints": 3462.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.045174337038770315,
+          "std": 0.0010095998482832634
+        },
+        "track_fit": {
+          "mean": 0.004043864808045328,
+          "std": 0.00010314992919392348
+        },
+        "track_match": {
+          "mean": 0.007016970054246485,
+          "std": 0.0006800044551546607
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.0001524945953860879,
+          "std": 8.537565767493776e-06
+        },
+        "track_score": {
+          "mean": 0.006792341056279838,
+          "std": 0.0006687531083780575
+        }
+      },
+      "track_building_total_per_event_s": 0.05623517190106213
+    },
+    {
+      "dataset": "data_90",
+      "multiplicity": 360,
+      "num_events": 10,
+      "avg_spacepoints": 3939.1,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.05190396117977798,
+          "std": 0.0008697494553573833
+        },
+        "track_fit": {
+          "mean": 0.004839149117469787,
+          "std": 0.0001864688286954343
+        },
+        "track_match": {
+          "mean": 0.009552245168015361,
+          "std": 0.0006724485966720077
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.0003118107095360756,
+          "std": 0.00016332042200679632
+        },
+        "track_score": {
+          "mean": 0.009167505544610322,
+          "std": 0.0006136541318957091
+        }
+      },
+      "track_building_total_per_event_s": 0.06629535546526313
+    },
+    {
+      "dataset": "data_100",
+      "multiplicity": 400,
+      "num_events": 10,
+      "avg_spacepoints": 4327.9,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.056497702235355975,
+          "std": 0.0010928281546882038
+        },
+        "track_fit": {
+          "mean": 0.014086000993847847,
+          "std": 0.02709766805920334
+        },
+        "track_match": {
+          "mean": 0.01054596968460828,
+          "std": 0.0014433416578051041
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.00023533017374575139,
+          "std": 4.891456990069921e-05
+        },
+        "track_score": {
+          "mean": 0.010229249484837055,
+          "std": 0.001431412866780494
+        }
+      },
+      "track_building_total_per_event_s": 0.0811296729138121
+    },
+    {
+      "dataset": "data_110",
+      "multiplicity": 440,
+      "num_events": 10,
+      "avg_spacepoints": 4762.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.06227455246262252,
+          "std": 0.0011703789219545209
+        },
+        "track_fit": {
+          "mean": 0.00549609859008342,
+          "std": 0.00016243056808407422
+        },
+        "track_match": {
+          "mean": 0.013286512601189316,
+          "std": 0.001275828612036784
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.00025529570411890744,
+          "std": 3.048988338550558e-05
+        },
+        "track_score": {
+          "mean": 0.012945128418505192,
+          "std": 0.001282966885368991
+        }
+      },
+      "track_building_total_per_event_s": 0.08105716365389526
+    },
+    {
+      "dataset": "data_120",
+      "multiplicity": 480,
+      "num_events": 10,
+      "avg_spacepoints": 5230.7,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.06810705885291099,
+          "std": 0.0011242098291383241
+        },
+        "track_fit": {
+          "mean": 0.005965875135734678,
+          "std": 0.0001885191668269711
+        },
+        "track_match": {
+          "mean": 0.01663569451775402,
+          "std": 0.0017419193375627256
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.00027914762031286953,
+          "std": 2.39962760169515e-05
+        },
+        "track_score": {
+          "mean": 0.01625736537389457,
+          "std": 0.0017201364766661444
+        }
+      },
+      "track_building_total_per_event_s": 0.09070862850639969
+    },
+    {
+      "dataset": "data_130",
+      "multiplicity": 520,
+      "num_events": 10,
+      "avg_spacepoints": 5670.7,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.07374522748868913,
+          "std": 0.0009159719948193416
+        },
+        "track_fit": {
+          "mean": 0.006427043490111828,
+          "std": 0.00022978385127811482
+        },
+        "track_match": {
+          "mean": 0.01941695036366582,
+          "std": 0.0016552534174296093
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.000311988266184926,
+          "std": 1.7088641195850236e-05
+        },
+        "track_score": {
+          "mean": 0.018993354286067188,
+          "std": 0.0016398696483795867
+        }
+      },
+      "track_building_total_per_event_s": 0.09958922134246678
+    },
+    {
+      "dataset": "data_140",
+      "multiplicity": 560,
+      "num_events": 10,
+      "avg_spacepoints": 6106.4,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.07919938212726266,
+          "std": 0.0006095041373415123
+        },
+        "track_fit": {
+          "mean": 0.00692898549605161,
+          "std": 9.770775915404169e-05
+        },
+        "track_match": {
+          "mean": 0.02240972619038075,
+          "std": 0.00222472423030617
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.0003852224675938487,
+          "std": 0.00016521996185723278
+        },
+        "track_score": {
+          "mean": 0.02190205520018935,
+          "std": 0.0021755363272977727
+        }
+      },
+      "track_building_total_per_event_s": 0.10853809381369503
+    },
+    {
+      "dataset": "data_150",
+      "multiplicity": 600,
+      "num_events": 10,
+      "avg_spacepoints": 6565.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.08523671047296374,
+          "std": 0.0006861086143273015
+        },
+        "track_fit": {
+          "mean": 0.007390180206857622,
+          "std": 0.00017186160211056165
+        },
+        "track_match": {
+          "mean": 0.026978129777126013,
+          "std": 0.0011422918098265057
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.0003766034729778767,
+          "std": 2.571135628244881e-05
+        },
+        "track_score": {
+          "mean": 0.026465291110798716,
+          "std": 0.0011280814952383477
+        }
+      },
+      "track_building_total_per_event_s": 0.11960502045694738
+    },
+    {
+      "dataset": "data_160",
+      "multiplicity": 640,
+      "num_events": 10,
+      "avg_spacepoints": 6944.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.08970545751508326,
+          "std": 0.0011195987200576156
+        },
+        "track_fit": {
+          "mean": 0.007877661217935383,
+          "std": 0.0001665223057697576
+        },
+        "track_match": {
+          "mean": 0.028657958889380098,
+          "std": 0.0024837738424250103
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.0003973538288846612,
+          "std": 1.972794483593643e-05
+        },
+        "track_score": {
+          "mean": 0.02811401996295899,
+          "std": 0.0024815491485109184
+        }
+      },
+      "track_building_total_per_event_s": 0.12624107762239875
+    },
+    {
+      "dataset": "data_170",
+      "multiplicity": 680,
+      "num_events": 10,
+      "avg_spacepoints": 7418.9,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.10390586666762829,
+          "std": 0.02444231049642454
+        },
+        "track_fit": {
+          "mean": 0.008492360333912074,
+          "std": 0.00022018003926367082
+        },
+        "track_match": {
+          "mean": 0.03409851489122957,
+          "std": 0.0018299217152616411
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.000490163965150714,
+          "std": 0.00015960377850163658
+        },
+        "track_score": {
+          "mean": 0.033445328730158506,
+          "std": 0.0017447435815188313
+        }
+      },
+      "track_building_total_per_event_s": 0.14649674189276993
+    },
+    {
+      "dataset": "data_180",
+      "multiplicity": 720,
+      "num_events": 10,
+      "avg_spacepoints": 7843.0,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.10982669510412961,
+          "std": 0.02466505684111164
+        },
+        "track_fit": {
+          "mean": 0.009086322993971408,
+          "std": 0.0002991072506674348
+        },
+        "track_match": {
+          "mean": 0.0369489164557308,
+          "std": 0.004020186299230783
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.000522319320589304,
+          "std": 0.00014468180901743618
+        },
+        "track_score": {
+          "mean": 0.03624819598626346,
+          "std": 0.004014686170396699
+        }
+      },
+      "track_building_total_per_event_s": 0.15586193455383182
+    },
+    {
+      "dataset": "data_190",
+      "multiplicity": 760,
+      "num_events": 10,
+      "avg_spacepoints": 8280.3,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.10700807818211615,
+          "std": 0.0012689236578657022
+        },
+        "track_fit": {
+          "mean": 0.009723636601120234,
+          "std": 0.0002968174760971939
+        },
+        "track_match": {
+          "mean": 0.04815185149200261,
+          "std": 0.023237765972244938
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.0005440840730443596,
+          "std": 3.4024999725373745e-05
+        },
+        "track_score": {
+          "mean": 0.04740941571071744,
+          "std": 0.023212629578170087
+        }
+      },
+      "track_building_total_per_event_s": 0.16488356627523898
+    },
+    {
+      "dataset": "data_200",
+      "multiplicity": 800,
+      "num_events": 10,
+      "avg_spacepoints": 8716.6,
+      "stage_per_event_s": {
+        "track_extract": {
+          "mean": 0.11296429899521172,
+          "std": 0.0014738002603814184
+        },
+        "track_fit": {
+          "mean": 0.010278883553110064,
+          "std": 0.0005604093200269706
+        },
+        "track_match": {
+          "mean": 0.04763950274791569,
+          "std": 0.004818658682938866
+        },
+        "track_embed": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_dotmatch": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_assemble": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_todevice": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_forward": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_simil": {
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "track_greedy": {
+          "mean": 0.0005881310440599919,
+          "std": 9.613551270243782e-05
+        },
+        "track_score": {
+          "mean": 0.04683648806530982,
+          "std": 0.00476572986145748
+        }
+      },
+      "track_building_total_per_event_s": 0.17088268529623746
+    }
+  ]
+}

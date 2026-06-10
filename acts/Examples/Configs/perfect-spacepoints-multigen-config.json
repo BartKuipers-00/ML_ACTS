@@ -1,17 +1,17 @@
 {
   "simulation": {
-    "events": 1000,
+    "events": 100,
     "numThreads": 1,
     "randomSeed": 42,
     "maxSteps": 10000,
     "loopFraction": 1,
     "eventGenerator": {
-      "particleTypes": ["muon", "proton", "pionplus", "electron"],
+      "particleTypes": ["muon"],
       "momentum": {"min": 0.1, "max": 0.5, "transverse": true},
       "eta": {"min": -0.15, "max": 0.15, "uniform": true},
-      "phi": {"min": 0.0, "max": 360.0},
+      "phi": {"min":0 , "max": 360},
       "particlesPerVertex": 1,
-      "multiplicity": 75,
+      "multiplicity": 500,
       "randomizeCharge": true
     }
   },
@@ -20,7 +20,7 @@
     "geometry": {"seedingConfig": "generic-seeding-config.json"}
   },
   "simulation_physics": {
-    "enableInteractions": true,
+    "enableInteractions": true ,
     "pMin": 0.01
   },
   "particleSelection": {
@@ -37,7 +37,7 @@
       "deltaR": {"min": 1.0, "max": 175.0},
       "collisionRegion": {"min": -250.0, "max": 250.0},
       "z": {"min": -2000.0, "max": 2000.0},
-      "maxSeedsPerSpM": 5, "sigmaScattering": 5.0, "radLengthPerSeed": 0.1, "minPt": 0.1, "impactMax": 3.0
+      "maxSeedsPerSpM":5 , "sigmaScattering": 5.0, "radLengthPerSeed": 0.1, "minPt": 0.1, "impactMax": 3.0
     },
     "finderOptions": {"bFieldInZ": 2, "beamPos": [0.0, 0.0]},
     "filterConfig": {"deltaInvHelixDiameter": 5e-05, "deltaRMin": 5.0, "compatSeedWeight": 200.0, "impactWeightFactor": 1.0, "zOriginWeightFactor": 1.0, "compatSeedLimit": 2, "seedWeightIncrement": 0.0, "numSeedIncrement": null, "seedConfirmation": false, "useDeltaRorTopRadius": false},
@@ -47,7 +47,7 @@
     "initialVarInflation": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
   },
   "trackFinding": {
-    "selectorConfig": {"pt": {"min": 0.1, "max": null}, "absEta": {"min": null, "max": 4.0}, "loc0": {"min": -4.0, "max": 4.0}, "nMeasurementsMin": 5, "maxHoles": 3, "maxOutliers": 2},
+    "selectorConfig": {"pt": {"min": 0.09, "max": 0.51}, "absEta": {"min": -0.17, "max": 0.17}, "loc0": {"min": -4.0, "max": 4.0}, "nMeasurementsMin": 7, "maxHoles": 3, "maxOutliers": 2},
     "ckfConfig": {"chi2CutOffMeasurement": 15.0, "chi2CutOffOutlier": 25.0, "numMeasurementsCutOff": 1, "maxSteps": 100000, "seedDeduplication": true, "stayOnSeed": true}
   },
   "matchingFractionThreshold": 0.7,

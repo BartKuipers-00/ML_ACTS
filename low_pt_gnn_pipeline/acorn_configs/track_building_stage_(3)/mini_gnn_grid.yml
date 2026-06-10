@@ -7,9 +7,9 @@
 
 # Grid search parameters (lists = grid, single values = fixed)
 grid_params:
-  # Architecture
-  hidden_dim: [128]
-  n_layers: [4]
+  # Architecture — settle n_layers for the winning capacity (hidden=256, emb=32)
+  hidden_dim: [256]
+  n_layers: [5, 4, 3]
 
   # Architecture
   emb_dim: [32]
@@ -21,16 +21,16 @@ grid_params:
 
   # Training
   lr: [0.001]
-  val_cos_sim_threshold: [0.5]
+  val_cos_sim_threshold: [0.65]
 
 # Fixed parameters (applied to all runs)
 fixed_params:
   # HTCondor job resources
   job_type: cpu        # "cpu" or "gpu"
-  job_category: express  # "express", "short", "medium", "long"
+  job_category: medium  # "express", "short", "medium", "long"
 
-  # Data
-  data_split: [3000, 200, 0]
+  # 
+  data_split: [5000, 100, 0]
   input_dir: data/gnn_stage
   precomputed_dir: data/track_building/mini_gnn_segments
 
@@ -38,12 +38,12 @@ fixed_params:
   batch_events: 16
   max_epochs: 150
   patience: 10
-  scheduler_patience: 2
+  scheduler_patience: 4
   scheduler_factor: 0.5
   val_check_interval: 0.2
 
-  # Node feature normalization: [x, y, z, r]
-  node_scales: [1000, 1000, 500, 1000]
+  # 
+  node_scales: [1000, 1000, 1200, 1000]
 
   # Output
   model_save_dir: data/track_building/mini_GNN_checkpoints

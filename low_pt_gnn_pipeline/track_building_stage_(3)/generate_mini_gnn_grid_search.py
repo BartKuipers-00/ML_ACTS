@@ -53,7 +53,7 @@ def resource_lines(job_type: str, job_category: str) -> str:
     if job_type == "gpu":
         cpus, memory, gpu_line = 8, "16G", "request_gpus            = 1\n"
     else:  # cpu
-        cpus, memory, gpu_line = 4, "16G", ""
+        cpus, memory, gpu_line = 4, "4G", ""
     return (
         f'+UseOS                  = "el9"\n'
         f'+JobCategory            = "{job_category}"\n'

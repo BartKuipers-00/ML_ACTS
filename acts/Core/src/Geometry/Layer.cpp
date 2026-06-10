@@ -243,50 +243,13 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
   if (m_surfaceArray &&
       (options.resolveMaterial || options.resolvePassive ||
                          options.resolveSensitive)) {
-    // ── PATCH: at()-based lookup (currently DISABLED — upstream-clean state)
-    // Project the trajectory onto the layer's representing surface and use
-    // that landing point for the surface-array bin lookup. at() returns
-    // only the surfaces in the single bin, so it MUST be paired with
-    // BoundaryTolerance::Infinite() above (the bin's primary sensor's
-    // plane is treated as unbounded so out-of-bin crossings still register).
-    // To re-enable: uncomment this block AND the "if (sensitive) Infinite()"
-    // block in processSurface, AND comment out the neighbors() line below.
-    // Vector3 lookupPosition = position;
-    // if (SurfaceIntersection intersection =
-    //         surfaceRepresentation()
-    //             .intersect(gctx, position, direction)
-    //             .closest();
-    //     intersection.isValid()) {
-    //   lookupPosition = intersection.position();
-    // }
-    // // get the candidates: at() returns only surfaces in the exact bin
-    // // containing lookupPosition (~1 candidate per layer crossing).
-    // const std::vector<const Surface*>& sensitiveSurfaces =
-    //     m_surfaceArray->at(lookupPosition);
-    // ── /PATCH ───────────────────────────────────────────────────────────
-    //
-    // Upstream-clean: neighbors() returns the bin and its surrounding
-    // neighbors (3x3 grid), so trajectories crossing module seams or stave
-    // overlaps are still found via finite-bounds intersect() rejection.
-    //
-    // ── PATCH: lookupPosition projection ────────────────────────────────
-    // The default neighbors(position) uses bare current position for the
-    // bin-lookup. That is mathematically equivalent to a RADIAL projection
-    // of the current point onto the representing surface — fine for the
-    // immediate next layer (propagator is right next to it), but wrong for
-    // inner-layer return-arc crossings where the trajectory is far from
-    // the layer in r and has azimuthal drift before arriving. We instead
-    // ray-cast the trajectory's line onto the layer's representing surface
-    // and use that crossing point for the bin lookup. To revert, comment
-    // this PATCH block out (lookupPosition stays unused) and pass `position`
-    // back to neighbors() below.
+    // Bin lookup: ray-cast the trajectory onto the layer's representing
+    // surface and use that crossing point so the 3×3 phi-z neighbourhood
+    // centres on the actual layer crossing (not a bare radial projection
+    // of the current position). In the helix regime, use the helix's
+    // transverse circle landing on the representing cylinder; otherwise
+    // fall back to the line ray-cast.
     Vector3 lookupPosition = position;
-    // Bin lookup direction: in the helix regime, ray-cast the helix's
-    // transverse circle onto the layer's representing cylinder so the
-    // 3×3 phi-z bin neighbourhood centres on the *curved* trajectory's
-    // actual layer crossing, not where a near-tangent line tangent
-    // would land. Outside the helix regime, fall back to the line
-    // ray-cast onto the representing surface.
     bool helixLookupOk = false;
     if (helixRegime &&
         surfaceRepresentation().type() == Surface::SurfaceType::Cylinder) {
@@ -310,7 +273,6 @@ Layer::compatibleSurfaces(const GeometryContext& gctx, const Vector3& position,
         lookupPosition = sIntersection.position();
       }
     }
-    // ── /PATCH ──────────────────────────────────────────────────────────
     const std::vector<const Surface*>& sensitiveSurfaces =
         m_surfaceArray->neighbors(lookupPosition);
     // loop through and veto

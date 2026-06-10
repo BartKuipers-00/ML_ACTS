@@ -232,7 +232,11 @@ def run_geant4_simulation(config=None):
                 multiplicity=acts.examples.FixedMultiplicityGenerator(n=multiplicity),
                 vertex=acts.examples.GaussianVertexGenerator(
                     mean=acts.Vector4(0, 0, 0, 0),
-                    stddev=acts.Vector4(0, 0, 0, 0),
+                    # Beam-spot smearing: 12.5 um transverse, 55.5 mm along z,
+                    # 1.0 ns in time (ACTS full-chain signal-vertex luminous region).
+                    stddev=acts.Vector4(
+                        0.0125 * u.mm, 0.0125 * u.mm, 55.5 * u.mm, 1.0 * u.ns
+                    ),
                 ),
                 particles=acts.examples.ParametricParticleGenerator(
                     p=(mom_config["min"] * u.GeV, mom_config["max"] * u.GeV),

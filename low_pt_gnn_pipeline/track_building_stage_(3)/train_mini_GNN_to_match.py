@@ -308,9 +308,8 @@ def run_training(config):
     model_save_path = None
     early_stopped = False
 
-    print(f"{'Step':>8}  {'train_loss':>12}  {'val_loss':>12}  {'match_acc':>10}  {'lr':>10}  "
-          f"{'t_load':>8}  {'t_collate':>9}  {'t_fwd':>8}  {'t_bwd':>8}  {'t_vloss':>8}  {'t_macc':>8}  {'status'}")
-    print("-" * 140)
+    print(f"{'Step':>8}  {'train_loss':>12}  {'val_loss':>12}  {'match_acc':>10}  {'lr':>10}  {'status'}")
+    print("-" * 70)
 
     for epoch in range(1, max_epochs + 1):
         model.train(True)
@@ -318,43 +317,27 @@ def run_training(config):
         train_losses = []
         step_in_epoch = 0
 
-        # Timing accumulators (seconds)
-        t_load = t_collate = t_fwd = t_bwd = 0.0
-        n_timed = 0
-
         pbar = tqdm(train_loader, desc=f"Epoch {epoch:>3} train", unit="batch", leave=False)
 
-        t_iter_start = perf_counter()
         for all_seg_data, pid_tensor, boundaries in pbar:
-            t_load += perf_counter() - t_iter_start  # time spent in DataLoader
-
             if len(all_seg_data) < 2:
-                t_iter_start = perf_counter()
                 continue
 
-            t0 = perf_counter()
             batch_data = Batch.from_data_list(all_seg_data).to(device)
             pid_tensor = pid_tensor.to(device)
-            t_collate += perf_counter() - t0
 
-            t0 = perf_counter()
             optimizer.zero_grad()
             embeddings = model(batch_data.x, batch_data.edge_index, batch_data.batch)
             loss = supcon_loss(embeddings, pid_tensor, temperature=temperature)
-            t_fwd += perf_counter() - t0
 
             if not loss.requires_grad:
-                t_iter_start = perf_counter()
                 continue
 
-            t0 = perf_counter()
             loss.backward()
             optimizer.step()
-            t_bwd += perf_counter() - t0
 
             train_losses.append(loss.item())
             step_in_epoch += 1
-            n_timed += 1
             pbar.set_postfix(loss=f"{np.mean(train_losses):.4f}")
 
             # Intra-epoch validation
@@ -364,18 +347,12 @@ def run_training(config):
                 train_loss = float(np.mean(train_losses))
                 train_losses = []
 
-                t0 = perf_counter()
                 val_loss = run_batches(model, val_preloaded, config, device)
-                t_val_loss = perf_counter() - t0
-
-                t0 = perf_counter()
                 match_acc = compute_val_matching_accuracy(model, val_preloaded, config, device)
-                t_match_acc = perf_counter() - t0
 
                 scheduler.step(val_loss)
                 current_lr = optimizer.param_groups[0]["lr"]
 
-                n = max(1, n_timed)
                 status = ""
                 if match_acc > best_match_acc:
                     if model_save_path is not None and model_save_path.exists():
@@ -401,21 +378,12 @@ def run_training(config):
                     patience_counter += 1
 
                 print(f"{step_label:>8}  {train_loss:>12.6f}  {val_loss:>12.6f}  "
-                      f"{match_acc:>10.4f}  {current_lr:>10.2e}  "
-                      f"{t_load/n:>7.3f}s  {t_collate/n:>8.3f}s  "
-                      f"{t_fwd/n:>7.3f}s  {t_bwd/n:>7.3f}s  "
-                      f"{t_val_loss:>7.1f}s  {t_match_acc:>7.1f}s  {status}")
-
-                # Reset timing for next chunk
-                t_load = t_collate = t_fwd = t_bwd = 0.0
-                n_timed = 0
+                      f"{match_acc:>10.4f}  {current_lr:>10.2e}  {status}")
 
                 if patience_counter >= patience:
                     print(f"\nEarly stopping: match_acc did not improve for {patience} checks.")
                     early_stopped = True
                     break
-
-            t_iter_start = perf_counter()  # restart load timer for next batch
 
         if early_stopped:
             break

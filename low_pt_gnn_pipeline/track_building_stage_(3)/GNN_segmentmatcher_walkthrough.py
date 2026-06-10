@@ -152,6 +152,9 @@ def run_gnn_segment_matching(dataset_name, config, model, device,
 
         graph.hit_track_labels = labels
         graph.time_taken = perf_counter() - t_event
+        # Stage-4 split: segment extraction (CC + Wrangler) vs miniGNN matching.
+        graph.time_extract = event_stats.get("time_extract_s", 0.0)
+        graph.time_match = event_stats.get("time_match_s", 0.0)
         total_time += graph.time_taken
 
         for key in total_stats:
@@ -302,10 +305,15 @@ Examples:
     output_dir_suffix = config.get('output_dir') or None
     output_dataset = f"{args.dataset}_{output_dir_suffix}" if output_dir_suffix else args.dataset
 
-    data_dir = Path(args.data_dir) if args.data_dir else None
+    # data_set_path (config) acts as a default for --data-dir: all stage dirs
+    # (input_dir, stage_dir, track_evaluation, visuals) live under it.
+    data_root = args.data_dir or config.get("data_set_path")
+    data_dir = Path(data_root) if data_root else None
+    if data_dir is not None and not data_dir.is_absolute():
+        data_dir = PIPELINE_ROOT / data_dir
     if data_dir is not None:
-        config["input_dir"] = str(data_dir / "gnn_stage")
-        config["stage_dir"] = str(data_dir / "track_building")
+        config["input_dir"] = str(data_dir / config.get("input_dir", "gnn_stage"))
+        config["stage_dir"] = str(data_dir / config.get("stage_dir", "track_building"))
         eval_output_dir = data_dir / "track_evaluation" / output_dataset
         plot_output_dir = data_dir / "visuals" / "track_metrics" / output_dataset
     else:
@@ -357,11 +365,22 @@ Examples:
     print("=" * 70)
     print()
 
-    if data_dir is not None:
-        config["input_dir"] = str(data_dir / "track_building")
+    # pre_build_tracks_dir (only with --skip-build): read prebuilt tracks from this
+    # dataset dir (relative to data_set_path), decoupled from output_dir naming.
+    prebuilt = config.get("pre_build_tracks_dir") if args.skip_build else None
+    if prebuilt:
+        prebuilt = Path(prebuilt)
+        if not prebuilt.is_absolute():
+            prebuilt = (data_dir / prebuilt) if data_dir is not None else (PIPELINE_ROOT / prebuilt)
+        config["input_dir"] = str(prebuilt.parent)
+        read_dataset = prebuilt.name
+    elif data_dir is not None:
+        config["input_dir"] = config["stage_dir"]   # already data_dir/<stage_dir>
+        read_dataset = output_dataset
     else:
         config["input_dir"] = str(PIPELINE_ROOT / "data" / "track_building")
-    evaluated_events, summary, summary_text = run_evaluation(output_dataset, config)
+        read_dataset = output_dataset
+    evaluated_events, summary, summary_text = run_evaluation(read_dataset, config)
     save_evaluation_results(evaluated_events, summary, summary_text, output_dataset, eval_output_dir)
 
     print()

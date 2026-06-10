@@ -20,6 +20,7 @@ Usage:
 import sys
 import argparse
 import glob
+import shutil
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -27,6 +28,10 @@ from tqdm import tqdm
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PIPELINE_ROOT = SCRIPT_DIR.parent
+
+# |z| trim for ODD/Geant4 (mm). This is the full ODD z extent, NOT the Fatras
+# GenericDetector value of 599mm used by clean_loops_and_attribute_segments.py.
+Z_CUT = 1210
 
 PARTICLE_ID_COLS = [
     "particle_id_pv", "particle_id_sv", "particle_id_part",
@@ -108,22 +113,31 @@ def assign_segments(hits_df):
     return hits_df
 
 
-def clean_event(event_prefix, max_segments):
+def clean_event(in_prefix, out_prefix, max_segments):
     """
     Clean a single Geant4 event: combine particle ID columns, assign segments,
-    remove excess hits, and update related CSV files.
+    remove excess hits, and write the related CSV files.
 
-    Modifies in-place:
+    Reads every input from ``in_prefix-*`` and writes the cleaned output to
+    ``out_prefix-*``. When ``out_prefix == in_prefix`` this modifies the event
+    in place (legacy behavior); when they differ, ``in_prefix`` is read-only and
+    a complete cleaned copy of the event (including the unmodified ``cells.csv``)
+    is written under ``out_prefix`` so downstream conversion has everything it needs.
+
+    Files written:
       - hits.csv:                   Adds 'particle_id' (combined), 'simhit_id',
                                     'segment_id'; removes excess hits.
       - measurement-simhit-map.csv: Removes entries for deleted hits.
       - measurements.csv:           Removes measurements whose simhit was deleted.
-      - particles_simulated.csv:    Removes particles that lost all hits.
+      - particles_*.csv:            Removes particles that lost all hits.
+      - cells.csv:                  Copied through unchanged (only when out != in).
 
     Parameters
     ----------
-    event_prefix : str
-        Path prefix for event files (e.g. '.../event000000000').
+    in_prefix : str
+        Path prefix for the source event files (e.g. '.../event000000000').
+    out_prefix : str
+        Path prefix for the cleaned output event files.
     max_segments : int
         Maximum allowed segment ID.
 
@@ -132,8 +146,9 @@ def clean_event(event_prefix, max_segments):
     tuple (int, int)
         (hits_removed, particles_removed)
     """
-    hits_path = f"{event_prefix}-hits.csv"
-    hits = pd.read_csv(hits_path)
+    separate_output = out_prefix != in_prefix
+
+    hits = pd.read_csv(f"{in_prefix}-hits.csv")
 
     # Combine particle ID components into a single integer (if not already done)
     if "particle_id" not in hits.columns:
@@ -148,47 +163,59 @@ def clean_event(event_prefix, max_segments):
 
     # Remove hits beyond allowed segments (keep noise hits with segment_id=0)
     mask_keep = (hits["segment_id"] <= max_segments) | (hits["segment_id"] == 0)
-    # Remove hits with |z| > 599 mm
-    mask_keep = mask_keep & (hits["tz"].abs() <= 599)
+    # Remove hits with |z| > Z_CUT mm (ODD extent, not the Fatras 599mm)
+    mask_keep = mask_keep & (hits["tz"].abs() <= Z_CUT)
     hits_removed = (~mask_keep).sum()
 
     removed_simhit_ids = set(hits.loc[~mask_keep, "simhit_id"])
 
     hits = hits[mask_keep].reset_index(drop=True)
-    hits.to_csv(hits_path, index=False)
+    hits.to_csv(f"{out_prefix}-hits.csv", index=False)
 
-    # Update measurement-simhit-map and measurements.csv
-    map_path = f"{event_prefix}-measurement-simhit-map.csv"
-    meas_path = f"{event_prefix}-measurements.csv"
-    if Path(map_path).exists() and len(removed_simhit_ids) > 0:
-        simhit_map = pd.read_csv(map_path)
-        mask_map_keep = ~simhit_map["hit_id"].isin(removed_simhit_ids)
-        removed_meas_ids = set(simhit_map.loc[~mask_map_keep, "measurement_id"])
-        simhit_map = simhit_map[mask_map_keep]
-        simhit_map.to_csv(map_path, index=False)
+    # Update measurement-simhit-map and measurements.csv. Always (re)write when
+    # producing a separate output copy; in-place mode only writes if something changed.
+    in_map = f"{in_prefix}-measurement-simhit-map.csv"
+    in_meas = f"{in_prefix}-measurements.csv"
+    removed_meas_ids = set()
+    if Path(in_map).exists():
+        simhit_map = pd.read_csv(in_map)
+        if len(removed_simhit_ids) > 0:
+            mask_map_keep = ~simhit_map["hit_id"].isin(removed_simhit_ids)
+            removed_meas_ids = set(simhit_map.loc[~mask_map_keep, "measurement_id"])
+            simhit_map = simhit_map[mask_map_keep]
+        if separate_output or len(removed_simhit_ids) > 0:
+            simhit_map.to_csv(f"{out_prefix}-measurement-simhit-map.csv", index=False)
 
-        if Path(meas_path).exists() and len(removed_meas_ids) > 0:
-            meas = pd.read_csv(meas_path)
+    if Path(in_meas).exists():
+        meas = pd.read_csv(in_meas)
+        if len(removed_meas_ids) > 0:
             meas = meas[~meas["measurement_id"].isin(removed_meas_ids)]
-            meas.to_csv(meas_path, index=False)
+        if separate_output or len(removed_meas_ids) > 0:
+            meas.to_csv(f"{out_prefix}-measurements.csv", index=False)
 
-    # Clean particles_simulated.csv (no particles_initial in Geant output)
+    # Clean particles files (Geant output has particles_simulated; initial may be absent)
     surviving_pids = set(hits["particle_id"].unique()) - {0}
     particles_removed = 0
     for suffix in ["particles_initial", "particles_simulated"]:
-        p_path = f"{event_prefix}-{suffix}.csv"
-        if not Path(p_path).exists():
+        in_p = f"{in_prefix}-{suffix}.csv"
+        if not Path(in_p).exists():
             continue
-        particles = pd.read_csv(p_path)
+        particles = pd.read_csv(in_p)
         # Build combined particle_id for the particles file
         if "particle_id" not in particles.columns:
             particles["particle_id"] = encode_particle_id(particles)
         n_before = len(particles)
         particles = particles[particles["particle_id"].isin(surviving_pids)]
-        if suffix in ("particles_initial", "particles_simulated"):
-            particles_removed += n_before - len(particles)
-        if len(particles) < n_before:
-            particles.to_csv(p_path, index=False)
+        particles_removed += n_before - len(particles)
+        if separate_output or len(particles) < n_before:
+            particles.to_csv(f"{out_prefix}-{suffix}.csv", index=False)
+
+    # Copy through per-event files we don't modify (cells) when writing to a new dir
+    if separate_output:
+        for suffix in ["cells"]:
+            in_f = f"{in_prefix}-{suffix}.csv"
+            if Path(in_f).exists():
+                shutil.copy2(in_f, f"{out_prefix}-{suffix}.csv")
 
     return hits_removed, particles_removed
 
@@ -206,6 +233,11 @@ def main():
         "--data-dir", type=str, default=None,
         help="Data directory containing a csv/ subdirectory. "
              "Defaults to base_dir from config."
+    )
+    parser.add_argument(
+        "--output-dir", type=str, default=None,
+        help="If set, read --data-dir/csv read-only and write cleaned CSVs to "
+             "--output-dir/csv (keeps originals untouched). Default: modify in place."
     )
     parser.add_argument(
         "--chunk", type=int, default=None,
@@ -249,6 +281,15 @@ def main():
         print(f"No hit files found in {csv_dir}")
         sys.exit(1)
 
+    # Optional separate output directory (keeps originals untouched).
+    out_csv_dir = None
+    if args.output_dir is not None:
+        out_csv_dir = Path(args.output_dir) / "csv"
+        out_csv_dir.mkdir(parents=True, exist_ok=True)
+        det = csv_dir / "detectors.csv"
+        if det.exists():
+            shutil.copy2(det, out_csv_dir / "detectors.csv")
+
     if args.chunk is not None and args.total_chunks is not None:
         n = len(all_hit_files)
         events_per_chunk = n // args.total_chunks
@@ -267,12 +308,17 @@ def main():
     print("CLEAN LOOPS AND ASSIGN SEGMENTS (Geant4)")
     print("=" * 80)
     print(f"CSV directory:    {csv_dir}")
+    if out_csv_dir is not None:
+        print(f"Output directory: {out_csv_dir}  (originals read-only)")
+    else:
+        print(f"Output directory: {csv_dir}  (in-place)")
     print(f"Events found:     {len(all_hit_files)}")
     if args.chunk is not None:
         print(f"Chunk:            {args.chunk}/{args.total_chunks} ({len(hit_files)} events)")
     print(f"Loop fraction:    {args.loop_fraction}")
     print(f"Max segments:     {max_segments}")
     print(f"  (segment 1=outgoing, 2=incoming, 3=outgoing, ...)")
+    print(f"|z| cut:          {Z_CUT} mm")
     print()
 
     total_hits_removed = 0
@@ -280,9 +326,13 @@ def main():
     events_affected = 0
 
     for hits_path in tqdm(hit_files, desc="Cleaning events", unit="event"):
-        event_prefix = hits_path.replace("-hits.csv", "")
+        in_prefix = hits_path.replace("-hits.csv", "")
+        if out_csv_dir is not None:
+            out_prefix = str(out_csv_dir / Path(in_prefix).name)
+        else:
+            out_prefix = in_prefix
 
-        hits_removed, particles_removed = clean_event(event_prefix, max_segments)
+        hits_removed, particles_removed = clean_event(in_prefix, out_prefix, max_segments)
 
         if hits_removed > 0 or particles_removed > 0:
             events_affected += 1

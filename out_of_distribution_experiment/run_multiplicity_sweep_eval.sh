@@ -50,7 +50,7 @@ if [ "${USE_SEGMENT_GNN}" = "True" ]; then
         testset --data-dir "${DATA_DIR}" --ood-config "${OOD_CONFIG}"
 else
     echo "--- Step 3: Helix segment matching + evaluation ---"
-    python "${PIPELINE_DIR}/track_building_stage_(3)/segment_matching_track_builder.py" \
+    python "${PIPELINE_DIR}/track_building_stage_(3)/helix_segmentmatcher_walkthrough.py" \
         testset --data-dir "${DATA_DIR}" --ood-config "${OOD_CONFIG}"
 fi
 

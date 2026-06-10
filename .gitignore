@@ -13,7 +13,13 @@ low_pt_gnn_pipeline/play.ipynb
 
 # Data files
 low_pt_gnn_pipeline/data*/
-# Job files 
+
+# Adjacency-matrix structural pruning experiments (local notes/findings)
+low_pt_gnn_pipeline/adjacency_pruning/
+
+# Performance / timing analysis (benchmarks, results, plots — local only)
+low_pt_gnn_pipeline/performance_analysis/
+# Job files
 jobs/
 
 # Claude 

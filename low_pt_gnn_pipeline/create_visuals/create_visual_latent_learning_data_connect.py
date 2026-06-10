@@ -30,6 +30,7 @@ except ImportError as e:
 script_dir = Path(__file__).resolve().parent
 sys.path.insert(0, str(script_dir))
 from visual_utils import build_hit_particle_type_map, get_particle_label
+from curved_edges import fit_helices_per_segment, build_curved_edge_xyz
 
 
 line_width = 7
@@ -97,8 +98,21 @@ def compute_segment_connectors(hit_particle_id, hit_segment_id, hit_t):
     return np.array([src, tgt], dtype=np.int64), np.array(pids, dtype=np.int64)
 
 
-def create_visualization(graph, color_by='none', show_edges=False, max_points=None, dashed_connectors=False, no_grid=False):
+def create_visualization(graph, color_by='none', show_edges=False, max_points=None, dashed_connectors=False, no_grid=False, curved=False):
     particle_type_map = build_hit_particle_type_map(graph)
+
+    particle_pt_map = {}
+    if 'track_particle_id' in graph.keys() and 'track_particle_pt' in graph.keys():
+        pids_arr = graph.track_particle_id.cpu().numpy()
+        pts_arr = graph.track_particle_pt.cpu().numpy()
+        for pid, pt in zip(pids_arr, pts_arr):
+            particle_pt_map[int(pid)] = float(pt)
+
+    def label_with_pt(pid):
+        base = get_particle_label(int(pid), particle_type_map)
+        if int(pid) in particle_pt_map:
+            return f"{base}, pT={particle_pt_map[int(pid)]:.3f} GeV"
+        return base
 
     hit_r = graph.hit_r.cpu().numpy()
     hit_phi = graph.hit_phi.cpu().numpy()
@@ -125,32 +139,9 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
     fig = go.Figure()
 
     # ---- Markers ----
-    if color_by == 'particle' and hit_particle_id is not None:
-        unique_particles = np.unique(hit_particle_id[hit_particle_id > 0])
-        colors = _palette()
-        for i, pid in enumerate(unique_particles):
-            mask = hit_particle_id == pid
-            color = colors[i % len(colors)]
-            particle_label = get_particle_label(int(pid), particle_type_map)
-            fig.add_trace(go.Scatter3d(
-                x=x[mask], y=y[mask], z=z[mask],
-                mode='markers', name=particle_label,
-                marker=dict(size=2, color=color, opacity=0.7),
-                hovertemplate=f'<b>{particle_label}</b><br>r=%{{customdata[0]:.2f}}<br>'
-                              'φ=%{customdata[1]:.3f}<br>z=%{customdata[2]:.2f}<br><extra></extra>',
-                customdata=np.column_stack([hit_r[mask], hit_phi[mask], hit_z[mask]]),
-            ))
-        if (hit_particle_id == 0).any():
-            mask = hit_particle_id == 0
-            fig.add_trace(go.Scatter3d(
-                x=x[mask], y=y[mask], z=z[mask],
-                mode='markers', name='Noise',
-                marker=dict(size=1.5, color='gray', opacity=0.5),
-                hovertemplate='<b>Noise</b><br>r=%{customdata[0]:.2f}<br>'
-                              'φ=%{customdata[1]:.3f}<br>z=%{customdata[2]:.2f}<br><extra></extra>',
-                customdata=np.column_stack([hit_r[mask], hit_phi[mask], hit_z[mask]]),
-            ))
-    elif color_by == 'region' and hit_region is not None:
+    # All hits are drawn as a single trace so the legend offers one on/off toggle
+    # for every spacepoint. Per-particle splitting is reserved for the curves below.
+    if color_by == 'region' and hit_region is not None:
         unique_regions = np.unique(hit_region)
         colors = _palette()
         for i, region in enumerate(unique_regions):
@@ -166,7 +157,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
             ))
     else:
         fig.add_trace(go.Scatter3d(
-            x=x, y=y, z=z, mode='markers', name='Hits',
+            x=x, y=y, z=z, mode='markers', name='Spacepoints',
             marker=dict(size=2, color='blue', opacity=0.7),
             hovertemplate='<b>Hit</b><br>r=%{customdata[0]:.2f}<br>'
                           'φ=%{customdata[1]:.3f}<br>z=%{customdata[2]:.2f}<br><extra></extra>',
@@ -186,7 +177,17 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
 
         connectors, _ = compute_segment_connectors(hit_particle_id, hit_segment_id, hit_t)
 
+        helices_by_seg = (
+            fit_helices_per_segment(hit_particle_id, hit_segment_id, x, y, z)
+            if curved else {}
+        )
+
         def _edge_xyz(edges):
+            if curved and helices_by_seg:
+                return build_curved_edge_xyz(
+                    edges, x, y, z, helices_by_seg,
+                    hit_particle_id, hit_segment_id,
+                )
             ex, ey, ez = [], [], []
             for j in range(edges.shape[1]):
                 s, t = edges[0, j], edges[1, j]
@@ -225,7 +226,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
                 colors = _palette()
                 for i, pid in enumerate(unique_particles):
                     color = colors[i % len(colors)]
-                    particle_label = get_particle_label(int(pid), particle_type_map)
+                    particle_label = label_with_pt(pid)
                     group = f'edges_{int(pid)}'
 
                     if within_edges.shape[1]:
@@ -274,7 +275,7 @@ def create_visualization(graph, color_by='none', show_edges=False, max_points=No
                         ex, ey, ez = _edge_xyz(sub)
                         if not ex:
                             continue
-                        particle_label = get_particle_label(int(pid), particle_type_map)
+                        particle_label = label_with_pt(pid)
                         fig.add_trace(go.Scatter3d(
                             x=ex, y=ey, z=ez, mode='lines',
                             name=f'Edges ({particle_label})',
@@ -332,6 +333,8 @@ def main():
                         help='Draw cross-segment connector edges as dashed (same color, toggles with the particle)')
     parser.add_argument('--no_grid', '--no-grid', action='store_true', default=False,
                         help='Hide axes, labels, and gridlines — show only the points and edges')
+    parser.add_argument('--curved', action='store_true', default=False,
+                        help='Draw edges as short helical arcs (per-segment Kasa fit) instead of straight chords')
     parser.add_argument('--max-points', type=int, default=None,
                         help='Maximum number of points to display')
     args = parser.parse_args()
@@ -412,10 +415,11 @@ def main():
                 output_path = visuals_dir / graph_path.name.replace('.pyg', '.html')
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"\nCreating visualization (color_by={args.color_by}, show_edges={args.show_edges}, dashed={args.dashed}, no_grid={args.no_grid})...")
+    print(f"\nCreating visualization (color_by={args.color_by}, show_edges={args.show_edges}, dashed={args.dashed}, no_grid={args.no_grid}, curved={args.curved})...")
     fig = create_visualization(graph, color_by=args.color_by,
                                show_edges=args.show_edges, max_points=args.max_points,
-                               dashed_connectors=args.dashed, no_grid=args.no_grid)
+                               dashed_connectors=args.dashed, no_grid=args.no_grid,
+                               curved=args.curved)
 
     print(f"Writing interactive HTML to: {output_path}")
     fig.write_html(str(output_path), include_plotlyjs='cdn')

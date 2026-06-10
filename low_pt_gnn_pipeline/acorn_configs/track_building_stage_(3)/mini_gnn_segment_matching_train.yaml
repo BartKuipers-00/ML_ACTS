@@ -7,7 +7,7 @@
 # ============================================================================
 
 # Number of events to use from each split: [n_trainset, n_valset, n_testset]
-data_split: [3000, 200, 0]
+data_split: [1000, 20, 0]
 
 # Input directory containing GNN-inferred graphs (used by mini_gnn_data_mining.py)
 input_dir: data/gnn_stage
@@ -21,13 +21,13 @@ precomputed_dir: data/track_building/mini_gnn_segments
 
 
 gnn:
-  hidden_dim: 128             # Width of each SAGEConv layer and projection MLP
+  hidden_dim: 128             # Width of each Conv layer and projection MLP
   emb_dim: 32                # Dimension of the final L2-normalized embedding vector
   n_layers: 4                # Number of SAGEConv message-passing layers
   dropout: 0.001
   proj_dim: 64              # Width of projection head hidden layers (default: hidden_dim)
   proj_layers: 2            # Number of hidden layers in projection head (default: 1) 
-  node_scales: [1000, 1000, 500, 1000]  # Normalization scales for [x, y, z, r]
+  node_scales: [1000, 1000, 1200, 1000]  # Normalization scales for [x, y, z, r]
 
 # 
 # SUPCON LOSS
@@ -36,7 +36,7 @@ temperature: 0.1
 
 # Cosine similarity threshold used when computing val matching accuracy
 # (pairs below this are not considered for matching during validation)
-val_cos_sim_threshold: 0.5
+val_cos_sim_threshold: 0.95
 
 # TRAINING HYPERPARAMETERS
 
@@ -47,7 +47,7 @@ max_epochs: 150
 patience: 10              # Early stopping
 scheduler_patience: 2      # ReduceLROnPlateau
 scheduler_factor: 0.5      # ReduceLROnPlateau
-val_check_interval: 0.2    # Validate every fraction of epoch (0.5 = twice per epoch, 1.0 = once)
+val_check_interval: 0.1    # Validate every fraction of epoch (0.5 = twice per epoch, 1.0 = once)
 
 # OUTPUT
 

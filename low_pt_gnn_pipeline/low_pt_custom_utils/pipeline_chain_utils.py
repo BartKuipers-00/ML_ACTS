@@ -24,7 +24,7 @@ from build_latent_graphs_fast import load_model as load_latent_model, run_graph_
 from acorn.core.infer_stage import infer as acorn_infer
 from acorn.utils.loading_utils import add_variable_name_prefix_in_config
 from low_pt_custom_utils.mini_gnn_segment_embedding import load_segment_gnn
-from GNN_segment_matching_track_builder import run_gnn_segment_matching
+from GNN_segmentmatcher_walkthrough import run_gnn_segment_matching
 from low_pt_custom_utils.track_evaluation_utils import (
     run_evaluation,
     save_evaluation_results,
@@ -48,9 +48,12 @@ def _cleanup(directory):
 # ── Stage functions ──────────────────────────────────────────────────────────
 
 
-def stage_csv_to_pyg(run_dir, num_events, dataset):
-    """Stage 1: ACTS CSV → PyTorch Geometric feature store."""
-    cfg = _load_yaml(
+def stage_csv_to_pyg(run_dir, num_events, dataset, base_config=None):
+    """Stage 1: ACTS CSV → PyTorch Geometric feature store.
+
+    base_config: full ActsReader config dict. When None, falls back to
+    acorn_configs/latent_stage_(1)/convert_csv_to_pyg_sets.yaml (full_chain default)."""
+    cfg = dict(base_config) if base_config is not None else _load_yaml(
         PIPELINE_ROOT / "acorn_configs" / "latent_stage_(1)" / "convert_csv_to_pyg_sets.yaml"
     )
     cfg["input_dir"]     = str(run_dir / "csv")
@@ -58,6 +61,7 @@ def stage_csv_to_pyg(run_dir, num_events, dataset):
     cfg["detector_path"] = str(run_dir / "csv" / "detectors.csv")
     cfg["data_split"]    = [0, 0, num_events]
     cfg["input_sets"]    = [dataset]
+    cfg.setdefault("detector", "generic")  # timing datasets are FATRAS/GenericDetector
     ActsCustomLowPTReader.infer(cfg)
     return run_dir / "feature_store"
 
@@ -86,9 +90,13 @@ def stage_build_graphs(run_dir, latent_ckpt, graph_config, dataset, debug_files=
     return run_dir / "graph_constructed_latent"
 
 
-def stage_gnn_inference(run_dir, gnn_ckpt, num_events, dataset, extra_config=None, debug_files=False):
-    """Stage 3: GNN InteractionGNN edge classification inference."""
-    cfg = _load_yaml(
+def stage_gnn_inference(run_dir, gnn_ckpt, num_events, dataset, extra_config=None,
+                        debug_files=False, base_config=None):
+    """Stage 3: GNN InteractionGNN edge classification inference.
+
+    base_config: full inference config dict. When None, falls back to
+    acorn_configs/gnn_stage_(2)/gnn_infer.yaml (full_chain default)."""
+    cfg = dict(base_config) if base_config is not None else _load_yaml(
         PIPELINE_ROOT / "acorn_configs" / "gnn_stage_(2)" / "gnn_infer.yaml"
     )
     cfg["input_dir"]     = str(run_dir / "graph_constructed_latent")

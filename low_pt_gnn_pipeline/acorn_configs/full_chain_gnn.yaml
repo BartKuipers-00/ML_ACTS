@@ -37,8 +37,8 @@ debug_files: false
 # ============================================================================
 models:
   latent_checkpoint:   saved_models/low_pt_latentmodel_100_mixed_f1=0.2752.ckpt
-  gnn_checkpoint:      saved_models/low_pt_gnn_100_MIXED_loss_val_loss=0.0013.ckpt
-  mini_gnn_checkpoint: data/track_building/mini_GNN_checkpoints/mini_gnn_segment_embedder_val_loss=1.2621.pt
+  gnn_checkpoint:      saved_models/Low_pt_gnn_300_MIXED_1i1o_best_val_loss=0.0007.ckpt
+  mini_gnn_checkpoint: saved_models/mini_gnn_segment_embedder_val_loss=1.2621.pt
 
 # ============================================================================
 # STAGE 0: SIMULATION
@@ -87,9 +87,14 @@ simulation:
 # STAGE 2: LATENT GRAPH CONSTRUCTION  (KNN in metric learning embedding)
 # ============================================================================
 graph_construction:
+  # Values mirror out_of_distribution_experiment/ood_experiment.yaml
+  # (latent_graph_construction) — the config that produced the Figure 43 curves.
   k_max: 250            # max neighbours per hit in latent space
-  r_max: 0.4            # max radius in latent space
-  r_max_geometric: 500  # max 3D Euclidean distance [mm] (geometric cut after KNN)
+  r_max: 0.18           # max radius in latent space
+  r_max_geometric: 600  # max 3D Euclidean distance [mm] (geometric cut after KNN)
+  same_layer_cut: geometry  # remove same-layer edges (same volume_id+layer_id); 'none' to disable
+  segmented: true       # require same segment for a true edge
+  one_in_one_out: true  # edge_y=1 only for consecutive time-ordered hit pairs
   device: auto          # "auto" → cuda if available, else cpu
   num_workers: 4
   process_batch_size: 4
@@ -105,8 +110,11 @@ gnn_inference: {}
 # STAGE 4: TRACK BUILDING  (GNN segment matching)
 # ============================================================================
 track_building:
+  # Values mirror acorn_configs/track_building_stage_(3)/gnn_segmentmatcher_walkthrough.yaml
+  # (the validated production segment-matcher config). Keep them in sync.
   use_gt_segments: false  # false = CC clusters from GNN scores, true = ground truth
-  score_cut: 0.85         # edge score threshold for Connected Components clustering
+  score_cut: 0.4          # edge score threshold for Connected Components clustering
+  use_wrangler: true      # CC + Wrangler walk-through disentanglement (essential at high mult.)
 
   gnn:
     # model_path is set automatically from models.mini_gnn_checkpoint above

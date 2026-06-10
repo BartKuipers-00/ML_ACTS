@@ -1,0 +1,203 @@
+{
+  "meta": {
+    "device": "cuda",
+    "gpu_name": "NVIDIA L40S",
+    "host": "wn-pijl-007.nikhef.nl",
+    "cpu_threads": 8,
+    "max_events": 5,
+    "mode": "in_memory_compute_only",
+    "precisions": [
+      "fp32",
+      "tf32",
+      "fp16"
+    ]
+  },
+  "records": [
+    {
+      "dataset": "testset",
+      "multiplicity": 280,
+      "num_events": 5,
+      "avg_spacepoints": 3074.4,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.008347209193743765,
+          "std": 0.00319582481118096
+        },
+        "graph": {
+          "mean": 0.670977497426793,
+          "std": 0.07128039955562408
+        },
+        "gnn": {
+          "mean": 0.8966717468108982,
+          "std": 0.025520881996825156
+        },
+        "track_extract": {
+          "mean": 0.03949674658942968,
+          "std": 0.005938307406137457
+        },
+        "track_match": {
+          "mean": 0.027920481585897505,
+          "std": 0.006671536051434218
+        }
+      },
+      "inference_total_per_event_s": 1.6350664724130184,
+      "efficiency": 0.8087649402390438,
+      "precision": "fp32"
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 800,
+      "num_events": 5,
+      "avg_spacepoints": 8760.8,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.017731291800737382,
+          "std": 0.011082164116966286
+        },
+        "graph": {
+          "mean": 3.41717635539826,
+          "std": 0.5095972795124907
+        },
+        "gnn": {
+          "mean": 3.4083410371793432,
+          "std": 0.14889795119747268
+        },
+        "track_extract": {
+          "mean": 0.16536972939502448,
+          "std": 0.1044665074500515
+        },
+        "track_match": {
+          "mean": 0.1406854728003964,
+          "std": 0.025877394583435263
+        }
+      },
+      "inference_total_per_event_s": 7.131572594773025,
+      "efficiency": 0.27285513361462727,
+      "precision": "fp32"
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 280,
+      "num_events": 5,
+      "avg_spacepoints": 3074.4,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.003736201231367886,
+          "std": 0.0011595804961794162
+        },
+        "graph": {
+          "mean": 0.6863453886471689,
+          "std": 0.07801861641259962
+        },
+        "gnn": {
+          "mean": 0.7936492852168158,
+          "std": 0.02122690376372697
+        },
+        "track_extract": {
+          "mean": 0.03746556779369712,
+          "std": 0.004951109907553253
+        },
+        "track_match": {
+          "mean": 0.025256595201790334,
+          "std": 0.005277792570139251
+        }
+      },
+      "inference_total_per_event_s": 1.542716836859472,
+      "efficiency": 0.8127490039840638,
+      "precision": "tf32"
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 800,
+      "num_events": 5,
+      "avg_spacepoints": 8760.8,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.005053472821600735,
+          "std": 0.0018293268581528934
+        },
+        "graph": {
+          "mean": 3.117796720191836,
+          "std": 0.2760881126881673
+        },
+        "gnn": {
+          "mean": 3.201565607590601,
+          "std": 0.045042417784861975
+        },
+        "track_extract": {
+          "mean": 0.16746874658856542,
+          "std": 0.05936106127261802
+        },
+        "track_match": {
+          "mean": 0.2524623597972095,
+          "std": 0.1822715226671583
+        }
+      },
+      "inference_total_per_event_s": 6.7392934341682125,
+      "efficiency": 0.28551336146272854,
+      "precision": "tf32"
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 280,
+      "num_events": 5,
+      "avg_spacepoints": 3074.4,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.0032174849649891256,
+          "std": 0.0006418592362071652
+        },
+        "graph": {
+          "mean": 0.6297856061486528,
+          "std": 0.06498337461964548
+        },
+        "gnn": {
+          "mean": 0.7924052328336983,
+          "std": 0.022333854409021064
+        },
+        "track_extract": {
+          "mean": 0.08301809218246489,
+          "std": 0.05894288286852807
+        },
+        "track_match": {
+          "mean": 0.05993273719213903,
+          "std": 0.053529946540805076
+        }
+      },
+      "inference_total_per_event_s": 1.565141668356955,
+      "efficiency": 0.8087649402390438,
+      "precision": "fp16"
+    },
+    {
+      "dataset": "testset",
+      "multiplicity": 800,
+      "num_events": 5,
+      "avg_spacepoints": 8760.8,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.00406753399875015,
+          "std": 0.00047743343993405157
+        },
+        "graph": {
+          "mean": 3.1603985863504933,
+          "std": 0.21775510119936836
+        },
+        "gnn": {
+          "mean": 3.034750455385074,
+          "std": 0.04312123576282478
+        },
+        "track_extract": {
+          "mean": 0.11121006577741355,
+          "std": 0.00451211698515256
+        },
+        "track_match": {
+          "mean": 0.14204597200732677,
+          "std": 0.01502646550004554
+        }
+      },
+      "inference_total_per_event_s": 6.448405079520307,
+      "efficiency": 0.2841068917018284,
+      "precision": "fp16"
+    }
+  ]
+}

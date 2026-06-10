@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "device": "cpu",
+    "gpu_name": null,
+    "host": "stbc-i1.nikhef.nl",
+    "cpu_threads": 24,
+    "max_events": 20,
+    "mode": "in_memory_compute_only",
+    "precisions": [
+      "fp32"
+    ]
+  },
+  "records": [
+    {
+      "dataset": "testset",
+      "multiplicity": 280,
+      "num_events": 20,
+      "avg_spacepoints": 3049.6,
+      "stage_per_event_s": {
+        "load": {
+          "mean": 0.03432397913420573,
+          "std": 0.02514650551787082
+        },
+        "graph": {
+          "mean": 0.8541539651574567,
+          "std": 0.42771325845055197
+        },
+        "gnn": {
+          "mean": 51.120729076233694,
+          "std": 1.6508801340617199
+        },
+        "track_extract": {
+          "mean": 0.04305229585152119,
+          "std": 0.0035400430627428956
+        },
+        "track_match": {
+          "mean": 0.08650860681664199,
+          "std": 0.03641613571216675
+        }
+      },
+      "inference_total_per_event_s": 52.10444394405932,
+      "efficiency": 0.8489499192245558,
+      "precision": "fp32"
+    }
+  ]
+}

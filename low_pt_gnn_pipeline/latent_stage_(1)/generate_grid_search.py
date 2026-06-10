@@ -152,7 +152,7 @@ arguments               = $(Process)
 +JobCategory            = "short"
 
 # CPU resource requirements
-request_cpus            = 18
+request_cpus            = 4
 request_memory          = 32G
 
 # File transfer
