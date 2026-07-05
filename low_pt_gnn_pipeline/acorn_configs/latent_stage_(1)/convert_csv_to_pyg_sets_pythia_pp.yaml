@@ -1,0 +1,68 @@
+# ============================================================================
+# ACTS DATA READER CONFIGURATION — Pythia pp 30PU (ALICE 3 / IRIS detector)
+# ============================================================================
+# Converts the ROOT-derived ACTS CSV files (see simulation_(0)/convert_acts_root_to_csv.py)
+# to PyG graphs. ALICE 3 has no detectors.csv, so geometry + global positions are read
+# straight from the measurement CSV columns via `geometry_from_csv: true`.
+# ============================================================================
+
+stage: data_reading
+model: ActsReader
+detector: alice3                             # selects the alice3 region map below
+
+# Input/Output
+input_dir: data_pythia_pp/csv/              # ROOT-derived ACTS CSV files
+stage_dir: data_pythia_pp/feature_store/    # Output PyG graphs
+
+# Data split [train, val, test]
+data_split: [10, 0, 0]
+input_sets: [trainset, valset, testset]
+
+# ACTS-specific settings
+simhit_stem: hits                           # truth sim-hits file (event*-hits.csv)
+use_truth_hits: false                       # use smeared measurement positions
+geometry_from_csv: true                     # take volume/layer/module + global x/y/z from CSV
+detector_path: data_pythia_pp/csv/detectors.csv  # minimal stub (positions come from CSV)
+
+# Features to extract
+feature_sets:
+  hit_features:
+    - hit_id
+    - hit_x
+    - hit_y
+    - hit_z
+    - hit_r
+    - hit_phi
+    - hit_eta
+    - hit_particle_id
+    - hit_region
+    - hit_volume_id
+    - hit_layer_id
+    - hit_t
+    - hit_segment_id
+  track_features:
+    - track_particle_id
+    - track_particle_type
+    - track_particle_pt
+    - track_particle_radius
+    - track_particle_nhits
+    - track_particle_eta
+    - track_particle_primary
+
+# Region labels — one map per detector geometry; `detector:` above selects one.
+region_labels_by_detector:
+  alice3:
+    1: {volume_id: 17}        # Inner pixel barrel  (r 5-25,    |z|<250)
+    2: {volume_id: 21}        # Outer pixel barrel  (r 69-303,  |z|<645)
+    3: {volume_id: [20, 22]}  # Outer pixel endcap  (r 100-349, |z| 770-1220)
+    4: {volume_id: 24}        # Outermost barrel    (r 447-801, |z|<1283)
+    5: {volume_id: [8, 25]}   # Outermost endcap    (r 200-674, |z| 1494-2206)
+
+# Processing
+max_workers: 16
+skip_csv_conversion: false
+skip_pyg_conversion: false
+variable_with_prefix: true
+
+# Logging
+log_level: INFO

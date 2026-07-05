@@ -66,6 +66,13 @@ region_labels_by_detector:
     4: {volume_id: 24}        # ShortStrip barrel
     5: {volume_id: [28, 30]}  # LongStrip endcap
     6: {volume_id: 29}        # LongStrip barrel
+  # ALICE 3 (IRIS) volume numbering — classified empirically from hit r/z extents
+  alice3:
+    1: {volume_id: 17}        # Inner pixel barrel  (r 5-25,    |z|<250)
+    2: {volume_id: 21}        # Outer pixel barrel  (r 69-303,  |z|<645)
+    3: {volume_id: [20, 22]}  # Outer pixel endcap  (r 100-349, |z| 770-1220)
+    4: {volume_id: 24}        # Outermost barrel    (r 447-801, |z|<1283)
+    5: {volume_id: [8, 25]}   # Outermost endcap    (r 200-674, |z| 1494-2206)
 
 # Processing
 max_workers: 16                             # 1 = disable multiprocessing (NumPy 2.x compatibility issue)

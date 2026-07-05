@@ -21,7 +21,13 @@ WORKSPACE_ROOT = PIPELINE_ROOT.parent
 sys.path.insert(0, str(WORKSPACE_ROOT / 'acorn'))
 sys.path.insert(0, str(PIPELINE_ROOT))
 
-from acorn.stages.edge_classifier.models.interaction_gnn import InteractionGNN
+from acorn.stages.edge_classifier.models.interaction_gnn import InteractionGNN, InteractionGNN2
+
+
+def gnn_class_for_ckpt(checkpoint_path):
+    """Pick IGNN1 vs IGNN2 from checkpoint hparams (in_out_diff_agg is IGNN2-only)."""
+    hp = torch.load(checkpoint_path, map_location="cpu", weights_only=False)["hyper_parameters"]
+    return InteractionGNN2 if "in_out_diff_agg" in hp else InteractionGNN
 
 
 def find_checkpoint(model_name, base_dir=None):
@@ -104,7 +110,7 @@ def evaluate_accuracy(model_name, config_file='acorn_configs/gnn_train.yaml', ed
     merged_hparams['reprocess_classifier'] = True
     
     # Load model with merged hyperparameters
-    model = InteractionGNN.load_from_checkpoint(
+    model = gnn_class_for_ckpt(checkpoint_path).load_from_checkpoint(
         str(checkpoint_path),
         map_location='cuda' if torch.cuda.is_available() else 'cpu',
         **merged_hparams

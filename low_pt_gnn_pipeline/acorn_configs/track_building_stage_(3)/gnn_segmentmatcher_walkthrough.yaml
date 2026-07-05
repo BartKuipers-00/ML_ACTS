@@ -2,14 +2,24 @@
 # Used by GNN_segmentmatcher_walkthrough.py
 
 # Dataset parameters  [n_trainset, n_valset, n_testset]
-data_split: [0, 100, 1000]
+data_split: [0, 2, 0]
 
 # Input/output
-data_set_path: data_300_mixed       # base dir; input_dir/stage_dir/track_evaluation/visuals live under it
+data_set_path: data       # base dir; input_dir/stage_dir/track_evaluation/visuals live under it
 input_dir: gnn_stage
 stage_dir: track_building
-output_dir: SegmentGNN_minlen7       # suffix appended to output dirs, e.g. "SegmentGNN_GT" → testset_SegmentGNN_GT
-pre_build_tracks_dir: track_building/testset_SegmentGNN_minlen7   # only with --skip-build: read prebuilt tracks from here (relative to data_set_path)
+output_dir: SegmentGNN      # suffix appended to output dirs, e.g. "SegmentGNN_GT" → testset_SegmentGNN_GT
+
+#pre_build_tracks_dir: track_building/testset_SegmentGNN_minlen7   # only with --skip-build: read prebuilt tracks from here (relative to data_set_path)
+
+
+
+# Input/output
+# data_set_path: data_300_mixed       # base dir; input_dir/stage_dir/track_evaluation/visuals live under it
+# input_dir: gnn_stage
+# stage_dir: track_building
+# output_dir: SegmentGNN_minlen7       # suffix appended to output dirs, e.g. "SegmentGNN_GT" → testset_SegmentGNN_GT
+# pre_build_tracks_dir: track_building/testset_SegmentGNN_minlen7   # only with --skip-build: read prebuilt tracks from here (relative to data_set_path)
 
 # ============================================================================
 # SEGMENT EXTRACTION
@@ -30,7 +40,9 @@ use_wrangler: true    # false = skip Wrangler, use plain CC (same as GNN_segment
 # ============================================================================
 
 gnn:
-  model_path: data_100_mixed/track_building/mini_GNN_checkpoints/mini_gnn_segment_embedder_val_loss=1.2621.pt
+  #model_path: data_100_mixed/track_building/mini_GNN_checkpoints/mini_gnn_segment_embedder_val_loss=1.2621.pt
+ 
+  model_path: data/track_building/mini_GNN_checkpoints/mini_gnn_segment_embedder_match_acc=0.9793.pt
 
   # Matching thresholds
   cos_sim_threshold: 0.65
@@ -39,7 +51,7 @@ gnn:
   # Geometric pre-filter: veto pairs where two segments are too co-located
   # at large r (confuser rejection). Applied before greedy matching.
   # Set geo_cut_enabled: false to disable without changing other params.
-  geo_cut_enabled:   true
+  geo_cut_enabled:   false
   geo_cut_r_high_mm: 150.0   # only consider hits above this radius (mm)
   geo_cut_r_tol_mm:  15.0    # |r_A - r_B| tolerance to consider hits co-layer (mm)
   geo_cut_min_3d_mm: 100.0   # min 3D separation required at overlapping layers (mm)

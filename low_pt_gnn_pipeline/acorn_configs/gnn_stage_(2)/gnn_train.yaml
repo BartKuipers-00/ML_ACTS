@@ -1,37 +1,54 @@
 
 # Paths are relative to low_pt_gnn_pipeline directory
 input_dir: data/graph_constructed_latent
-stage_dir: data/gnn_stage/ 
-project: GNN_gridsearch_geant_300_mixed
-accelerator: cuda      #cpu vs cuda 
-devices: 1             
+stage_dir: data/gnn_stage/
+project: InteractionGNN2_barrel
+accelerator: cuda      #cpu vs cuda
+devices: 1
 nodes: 1
 precision: "16-mixed"
-logger: false  
+logger: false
 use_wandb: true  # Enable W&B tracking
 wandb_entity: bart_kuipers-nikhef  # W&B entity/username
 wandb_log_every_n_batches: 50
 
 data_split: [12500, 200, 200]  # [training, validation, testing]
 
-# Model architecture parameters
+# Model: InteractionGNN2 (GNN4ITk / L2IT architecture)
+# Architecture hyperparams start from acorn defaults (examples/ACAT_2025/gnn_train.yaml)
+model: InteractionGNN2
 edge_cut: 0.5  # Threshold for edge classification (0-1)
 undirected: true
-undirected_message_passing: true
-#node_features: [hit_r, hit_phi, hit_z, hit_t_smeared] 
+#node_features: [hit_r, hit_phi, hit_z, hit_t_smeared]
 # node_features: [hit_r, hit_phi, hit_z, hit_t_smeared, hit_has_time]
 node_features: [hit_r, hit_phi, hit_z]
 node_scales: [1000, 3.14159265359, 1200]
+# edge_features: []  # none available -> edge encoder falls back to concatenated node latents
 
-hidden: 128 
-n_graph_iters: 8 #  8
-nb_node_layer: 3
-nb_edge_layer: 3
+hidden: 128            # acorn default (was 256 with IGNN1)
+n_graph_iters: 8
+n_node_net_layers: 3
+n_edge_net_layers: 3
+n_node_encoder_layers: 3
+n_edge_encoder_layers: 3
+n_node_decoder_layers: 3
+n_edge_decoder_layers: 3
 layernorm: true
-batchnorm: true
-aggregation: [sum, mean]  # Aggregation methods  in message 
-hidden_activation: SiLU
-output_activation: Tanh
+output_layer_norm: false
+edge_output_transform_final_layer_norm: false
+batchnorm: false       # IGNN2 default: layernorm only
+output_batch_norm: false
+edge_output_transform_final_batch_norm: false
+bn_track_running_stats: false
+hidden_activation: ReLU  
+output_activation: ReLU  
+edge_output_transform_final_activation: null
+concat: true              # re-inject initial encodings each graph iteration
+node_net_recurrent: false # unshared weights per iteration
+edge_net_recurrent: false
+in_out_diff_agg: true     # aggregate incoming/outgoing edge messages separately
+checkpointing: true       # gradient checkpointing (memory for compute)
+aggr: sum                 # code default; "add" silently falls back to mean!
 
 # Training parameters
 # batch_size: Hardcoded to 1 in ACORN (full-event training, one graph at a time)
@@ -42,7 +59,7 @@ accumulate_grad_batches: 1  # Effective batch size: accumulate gradients over N 
 
 max_epochs: 15
 warmup: 1          #lineair increse from o to lr over warup epoch
-lr: 0.001          # ~ 0.001
+lr: 0.001          # ~ 0.001 (acorn default: 0.0005)
 factor: 0.8
 patience: 0     # Reduce LR after val_loss hasn't improved for this many partial epochs
 early_stopping_patience: 4  # Stop training after val_loss hasn't improved for this many partial epochs

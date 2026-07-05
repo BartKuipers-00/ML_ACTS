@@ -18,7 +18,15 @@ namespace Acts {
 class Surface;
 }  // namespace Acts
 
+#include <atomic>
+#include <cstdint>
+
 namespace Acts::detail {
+
+/// [ckf-timing] diagnostic counters: total helixPlaneIntersection calls and
+/// how many of those fell back to the straight-line intersect.
+std::atomic<std::uint64_t>& helixIntersectCallCounter();
+std::atomic<std::uint64_t>& helixIntersectFallbackCounter();
 
 /// Closed-form helix-plane intersection for a charged particle in a uniform
 /// magnetic field with a planar surface (e.g. a barrel sensitive module).

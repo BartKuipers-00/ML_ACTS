@@ -1,30 +1,27 @@
-# GNN Hyperparameter Grid Search Configuration
-# 
+# GNN Hyperparameter Grid Search Configuration (InteractionGNN2)
+#
 # Usage:    python generate_grid_search.py
 #
 
 # Grid search parameters (lists = grid, single values = fixed)
 grid_params:
-  # Architecture
-  hidden: [256]  # Hidden layer size.  256
+  # Architecture (acorn IGNN2 defaults as starting point)
+  hidden: [128]  # acorn default 128 (IGNN1 runs used 256)
   n_graph_iters: [8]
-  nb_node_layer: [3]  # 3
-  nb_edge_layer: [3]  # 3
-  
-  # Training  
-  lr: [0.001]  # Learning rate            
+  n_node_net_layers: [3]
+  n_edge_net_layers: [3]
+
+  # Training
+  lr: [0.001]  # Learning rate (acorn default: 0.0005)
   warmup: [1]
   patience: [0]           # for lr decay
-  
-  # Aggregation
-  aggregation:
-    - [sum, mean, max, std]  
-   # Aggregation functions for node updates
 
+  # Aggregation: "sum" = scatter_add, anything else falls back to scatter_mean
+  aggr: [sum]
 
-  # Activations
-  hidden_activation: [SiLU]
-  output_activation: [Tanh]
+  # Activations (acorn IGNN2 defaults: ReLU/ReLU)
+  hidden_activation: [ReLU]
+  output_activation: [ReLU]
 
 # Fixed parameters (applied to all runs)
 fixed_params:
@@ -38,29 +35,42 @@ fixed_params:
   use_wandb: true
   wandb_entity: bart_kuipers-nikhef
   wandb_log_every_n_batches: 50
-  
+
   # Hardware
   accelerator: cuda
   devices: 1
   nodes: 1
   precision: "16-mixed"
-  
-  # Model
+
+  # Model (InteractionGNN2, acorn defaults)
+  model: InteractionGNN2
   edge_cut: 0.5
   undirected: true
-  undirected_message_passing: true
 
   node_features: [hit_r, hit_phi, hit_z, hit_t_smeared, hit_has_time]
   node_scales: [1000, 3.14159265359, 500, 4000, 1]
 
   # node_features: [hit_r, hit_phi, hit_z]      # 3D features (without time)
-  # ode_scales: [1000, 3.14159265359, 500]                # Scales for [r, phi, z, t]
-  # node_features: [hit_r, hit_phi, hit_z, hit_t]      # 3D features (without time)
-  # node_scales: [1000, 3.14, 499, 2000]                # Scales for [r, phi, z, t]
-  
+  # node_scales: [1000, 3.14159265359, 500]     # Scales for [r, phi, z]
+
+  n_node_encoder_layers: 3
+  n_edge_encoder_layers: 3
+  n_node_decoder_layers: 3
+  n_edge_decoder_layers: 3
   layernorm: true
-  batchnorm: true
-  
+  output_layer_norm: false
+  edge_output_transform_final_layer_norm: false
+  batchnorm: false       # IGNN2 default: layernorm only
+  output_batch_norm: false
+  edge_output_transform_final_batch_norm: false
+  bn_track_running_stats: false
+  edge_output_transform_final_activation: null
+  concat: true
+  node_net_recurrent: false
+  edge_net_recurrent: false
+  in_out_diff_agg: true
+  checkpointing: true
+
   # Training
   num_workers: [8, 8, 0]
   max_epochs: 15
@@ -76,18 +86,3 @@ fixed_params:
 
   pos_weight: 1
   logger: false
-
-
-  #   # Training
-  # num_workers: [8, 8, 0]
-  # max_epochs: 50
-  # scheduler: ReduceLROnPlateau
-  # factor: 0.5
-  # early_stopping_patience: 4
-  # log_every_n_steps: 1
-  # check_val_every_n_epoch: 1
-  # val_check_interval: 0.2
-  # accumulate_grad_batches: 1
-  # pos_weight: 1
-  # logger: false
-

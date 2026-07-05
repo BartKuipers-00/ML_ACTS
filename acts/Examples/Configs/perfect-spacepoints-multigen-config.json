@@ -6,12 +6,12 @@
     "maxSteps": 10000,
     "loopFraction": 1,
     "eventGenerator": {
-      "particleTypes": ["muon"],
+      "particleTypes": ["muon", "pionplus", "proton", "electron"],
       "momentum": {"min": 0.1, "max": 0.5, "transverse": true},
       "eta": {"min": -0.15, "max": 0.15, "uniform": true},
       "phi": {"min":0 , "max": 360},
       "particlesPerVertex": 1,
-      "multiplicity": 500,
+      "multiplicity": 75,
       "randomizeCharge": true
     }
   },

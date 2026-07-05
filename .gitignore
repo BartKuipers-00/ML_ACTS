@@ -10,9 +10,15 @@ miniconda3/
 # Notebooks
 low_pt_gnn_pipeline/hit_density.ipynb
 low_pt_gnn_pipeline/play.ipynb
+low_pt_gnn_pipeline/grazing_edge_score_study.ipynb
 
-# Data files
+# Data files (includes ColliderML samples: data_coliderML/)
 low_pt_gnn_pipeline/data*/
+
+low_pt_gnn_pipeline/results/
+
+out_of_distribution_experiment/
+
 
 # Adjacency-matrix structural pruning experiments (local notes/findings)
 low_pt_gnn_pipeline/adjacency_pruning/

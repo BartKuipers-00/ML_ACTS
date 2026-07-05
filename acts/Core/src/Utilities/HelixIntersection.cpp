@@ -22,41 +22,43 @@ namespace Acts::detail {
 
 namespace {
 
-// Wrap a delta-α into a forward branch consistent with the rotation sign.
-// rotSign = +1: forward motion ⇒ α increases ⇒ desired Δα ∈ [0, 2π).
-// rotSign = -1: forward motion ⇒ α decreases ⇒ desired Δα ∈ (-2π, 0].
-constexpr double wrapForward(double dalpha, double rotSign) {
-  constexpr double twoPi = 2.0 * std::numbers::pi;
-  if (rotSign > 0.0) {
-    while (dalpha < 0.0) {
-      dalpha += twoPi;
-    }
-    while (dalpha >= twoPi) {
-      dalpha -= twoPi;
-    }
-  } else {
-    while (dalpha > 0.0) {
-      dalpha -= twoPi;
-    }
-    while (dalpha <= -twoPi) {
-      dalpha += twoPi;
-    }
+// Forward arc length from (cosA0,sinA0) to (cosA,sinA): Δα via one atan2.
+// Fold into the forward branch only when more than sTol behind, so FP noise
+// at the on-surface point (Δα≈0) cannot flip s to a full loop.
+inline double forwardArcLength(double cosA, double sinA, double cosA0,
+                               double sinA0, double dalphaToS, double sTol) {
+  const double dalpha = std::atan2(sinA * cosA0 - cosA * sinA0,
+                                   cosA * cosA0 + sinA * sinA0);
+  double s = dalpha * dalphaToS;
+  if (s < -sTol) {
+    s += 2.0 * std::numbers::pi * std::abs(dalphaToS);
   }
-  return dalpha;
+  return s;
 }
 
 }  // namespace
+
+std::atomic<std::uint64_t>& helixIntersectCallCounter() {
+  static std::atomic<std::uint64_t> c{0};
+  return c;
+}
+std::atomic<std::uint64_t>& helixIntersectFallbackCounter() {
+  static std::atomic<std::uint64_t> c{0};
+  return c;
+}
 
 SurfaceIntersection helixPlaneIntersection(
     const GeometryContext& gctx, const Surface& surface,
     const Vector3& position, const Vector3& direction, double qOverP,
     const Vector3& bField, const BoundaryTolerance& boundaryTolerance,
     double surfaceTolerance) {
+  helixIntersectCallCounter().fetch_add(1, std::memory_order_relaxed);
   // Helper: when preconditions for the closed-form helix model are not
   // satisfied (non-axial B, degenerate kinematics, tilted surface), we
   // fall back to the standard line-plane intersect so the caller always
   // gets one authoritative answer.
   auto lineIntersect = [&]() {
+    helixIntersectFallbackCounter().fetch_add(1, std::memory_order_relaxed);
     return surface
         .intersect(gctx, position, direction, boundaryTolerance,
                    surfaceTolerance)
@@ -64,19 +66,19 @@ SurfaceIntersection helixPlaneIntersection(
   };
 
   // Guard against degenerate inputs that would make the helix model
-  // meaningless.
-  const double bMag = bField.norm();
-  if (bMag < 1.0e-12 || std::abs(qOverP) < 1.0e-12) {
+  // meaningless. (Squared comparisons — avoids a sqrt per call.)
+  const double bMag2 = bField.squaredNorm();
+  if (bMag2 < 1.0e-24 || std::abs(qOverP) < 1.0e-12) {
     return lineIntersect();
   }
 
   // Restrict to axial B (B parallel to global z). For non-axial fields,
   // bail out — the closed-form below is specific to barrel + axial.
-  const double bAxialFraction = std::abs(bField[2]) / bMag;
-  if (bAxialFraction < 0.999) {
+  // |bz|/|B| >= 0.999  ⇔  bz² >= 0.999²·|B|².
+  const double bz = bField[2];
+  if (bz * bz < 0.998001 * bMag2) {
     return lineIntersect();
   }
-  const double bz = bField[2];
 
   // Decompose direction into transverse and z components. cos(λ) is the
   // transverse magnitude; sin(λ) the z component. direction is unit-norm.
@@ -111,8 +113,9 @@ SurfaceIntersection helixPlaneIntersection(
   const double Cx = position[0] + signC * R * direction[1] / cosLambda;
   const double Cy = position[1] - signC * R * direction[0] / cosLambda;
 
-  // Initial angular coordinate.
-  const double alpha0 = std::atan2(position[1] - Cy, position[0] - Cx);
+  // Initial angle as (cos, sin), directly from the tangent (no atan2).
+  const double cosA0 = -signC * direction[1] / cosLambda;
+  const double sinA0 = signC * direction[0] / cosLambda;
 
   // Surface normal at the current point. Restrict to barrel-like (n̂_z ≈ 0).
   const Vector3 n3 = surface.normal(gctx, position, direction);
@@ -143,35 +146,27 @@ SurfaceIntersection helixPlaneIntersection(
     return SurfaceIntersection::invalid(surface);
   }
 
-  // Solve.
-  const double phi_n = std::atan2(ny, nx);
-  const double dphi = std::acos(std::clamp(rhs, -1.0, 1.0));
-  const double alpha1 = phi_n + dphi;
-  const double alpha2 = phi_n - dphi;
+  // Solve algebraically: α = φₙ ± dφ with (cosφₙ,sinφₙ)=(nx,ny),
+  // cos(dφ)=rhs, sin(dφ)=√(1-rhs²). Angle-addition gives (cosα,sinα)
+  // directly — no acos/atan2/cos/sin.
+  const double sd = std::sqrt(std::max(0.0, 1.0 - rhs * rhs));
+  const double cosA1 = nx * rhs - ny * sd, sinA1 = ny * rhs + nx * sd;
+  const double cosA2 = nx * rhs + ny * sd, sinA2 = ny * rhs - nx * sd;
 
-  // Convert each candidate α to a forward arc length. We parametrize by
-  // total arc length s; angular advance per unit s is rotSign · cos(λ) / R.
   const double dalpha_to_s = R / (rotSign * cosLambda);
+  const double s1 = forwardArcLength(cosA1, sinA1, cosA0, sinA0,
+                                     dalpha_to_s, surfaceTolerance);
+  const double s2 = forwardArcLength(cosA2, sinA2, cosA0, sinA0,
+                                     dalpha_to_s, surfaceTolerance);
 
-  const double dalpha1 = wrapForward(alpha1 - alpha0, rotSign);
-  const double dalpha2 = wrapForward(alpha2 - alpha0, rotSign);
-
-  const double s1 = dalpha1 * dalpha_to_s;  // ≥ 0
-  const double s2 = dalpha2 * dalpha_to_s;  // ≥ 0
-
-  // Pick the smaller forward arc length. (s1, s2 are both ≥ 0 by wrapForward.)
-  // We do NOT try the far solution if the near one fails the bounded check —
-  // the far solution is on the *other side* of the helix loop (after a long
-  // arc), where energy losses and material make the local-helix model
-  // unreliable, and the trajectory will have crossed many other surfaces
-  // first. If the near landing isn't on the module's silicon, the curve
-  // physically doesn't hit the module on its forward path.
+  // Pick the smaller forward arc length; the far solution is on the other
+  // side of the loop where the local-helix model is unreliable.
   const bool pickFirst = (s1 <= s2);
   const double sChosen = pickFirst ? s1 : s2;
-  const double alphaChosen = pickFirst ? alpha1 : alpha2;
+  const double cosAC = pickFirst ? cosA1 : cosA2;
+  const double sinAC = pickFirst ? sinA1 : sinA2;
 
-  const Vector3 landing{Cx + R * std::cos(alphaChosen),
-                        Cy + R * std::sin(alphaChosen),
+  const Vector3 landing{Cx + R * cosAC, Cy + R * sinAC,
                         position[2] + sChosen * sinLambda};
 
   IntersectionStatus status = IntersectionStatus::reachable;
@@ -243,27 +238,27 @@ bool helixBarrelCylinderLanding(const Vector3& position,
     return false;
   }
 
-  // Solve A · cos α + B · sin α = rhs, with A = Cx, B = Cy.
-  const double phi_n = std::atan2(Cy, Cx);
-  const double dphi = std::acos(std::clamp(rhsNorm, -1.0, 1.0));
-  const double alpha1 = phi_n + dphi;
-  const double alpha2 = phi_n - dphi;
+  // Solve algebraically (see helixPlaneIntersection): (cosφₙ,sinφₙ)=C/|C|.
+  const double nx = Cx / rhsScale, ny = Cy / rhsScale;
+  const double sd = std::sqrt(std::max(0.0, 1.0 - rhsNorm * rhsNorm));
+  const double cosA1 = nx * rhsNorm - ny * sd, sinA1 = ny * rhsNorm + nx * sd;
+  const double cosA2 = nx * rhsNorm + ny * sd, sinA2 = ny * rhsNorm - nx * sd;
 
-  const double alpha0 = std::atan2(position[1] - Cy, position[0] - Cx);
+  const double cosA0 = -signC * direction[1] / cosLambda;
+  const double sinA0 = signC * direction[0] / cosLambda;
   const double dalpha_to_s = R / (rotSign * cosLambda);
 
-  const double dalpha1 = wrapForward(alpha1 - alpha0, rotSign);
-  const double dalpha2 = wrapForward(alpha2 - alpha0, rotSign);
-
-  const double s1 = dalpha1 * dalpha_to_s;
-  const double s2 = dalpha2 * dalpha_to_s;
+  const double s1 = forwardArcLength(cosA1, sinA1, cosA0, sinA0,
+                                     dalpha_to_s, s_onSurfaceTolerance);
+  const double s2 = forwardArcLength(cosA2, sinA2, cosA0, sinA0,
+                                     dalpha_to_s, s_onSurfaceTolerance);
 
   const bool pickFirst = (s1 <= s2);
   const double sChosen = pickFirst ? s1 : s2;
-  const double alphaChosen = pickFirst ? alpha1 : alpha2;
+  const double cosAC = pickFirst ? cosA1 : cosA2;
+  const double sinAC = pickFirst ? sinA1 : sinA2;
 
-  landing = Vector3{Cx + R * std::cos(alphaChosen),
-                    Cy + R * std::sin(alphaChosen),
+  landing = Vector3{Cx + R * cosAC, Cy + R * sinAC,
                     position[2] + sChosen * sinLambda};
   if (arcLength != nullptr) {
     *arcLength = sChosen;

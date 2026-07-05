@@ -8,6 +8,8 @@
 
 #include "ActsExamples/TrackFinding/TrackFindingAlgorithm.hpp"
 
+#include <chrono>  // [ckf-timing] diagnostic
+
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Definitions/Direction.hpp"
 #include "Acts/Definitions/TrackParametrization.hpp"
@@ -32,6 +34,7 @@
 #include "Acts/TrackFinding/TrackStateCreator.hpp"
 #include "Acts/TrackFitting/GainMatrixUpdater.hpp"
 #include "Acts/Utilities/Enumerate.hpp"
+#include "Acts/Utilities/HelixIntersection.hpp"  // [ckf-timing]
 #include "Acts/Utilities/Logger.hpp"
 #include "Acts/Utilities/TrackHelpers.hpp"
 #include "ActsExamples/EventData/IndexSourceLink.hpp"
@@ -461,6 +464,10 @@ ProcessCode TrackFindingAlgorithm::execute(const AlgorithmContext& ctx) const {
     }
   }
 
+  long long _find_ns = 0;  // [ckf-timing] time spent inside findTracks
+  auto _t0 = std::chrono::steady_clock::now();  // [ckf-timing]
+  auto _hx0 = Acts::detail::helixIntersectCallCounter().load();   // [ckf-timing]
+  auto _hf0 = Acts::detail::helixIntersectFallbackCounter().load();
   for (std::size_t iSeed = 0; iSeed < initialParameters.size(); ++iSeed) {
     m_nTotalSeeds++;
 
@@ -490,8 +497,12 @@ ProcessCode TrackFindingAlgorithm::execute(const AlgorithmContext& ctx) const {
         initialParameters.at(iSeed);
 
     auto firstRootBranch = tracksTemp.makeTrack();
+    auto _f0 = std::chrono::steady_clock::now();  // [ckf-timing]
     auto firstResult = (*m_cfg.findTracks)(firstInitialParameters, firstOptions,
                                            tracksTemp, firstRootBranch);
+    _find_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - _f0)
+                    .count();  // [ckf-timing]
     nSeed++;
 
     if (!firstResult.ok()) {
@@ -569,9 +580,13 @@ ProcessCode TrackFindingAlgorithm::execute(const AlgorithmContext& ctx) const {
 
           auto secondRootBranch = tracksTemp.makeTrack();
           secondRootBranch.copyFromWithoutStates(trackCandidate);
+          auto _s0 = std::chrono::steady_clock::now();  // [ckf-timing]
           auto secondResult =
               (*m_cfg.findTracks)(secondInitialParameters, secondOptions,
                                   tracksTemp, secondRootBranch);
+          _find_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          std::chrono::steady_clock::now() - _s0)
+                          .count();  // [ckf-timing]
 
           if (!secondResult.ok()) {
             ACTS_WARNING("Second track finding failed for seed "
@@ -685,6 +700,18 @@ ProcessCode TrackFindingAlgorithm::execute(const AlgorithmContext& ctx) const {
       }
     }
   }
+
+  // [ckf-timing] per-event breakdown: seed combinatorics vs propagation
+  auto _loop_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - _t0)
+                      .count();
+  ACTS_WARNING("[ckf-timing] seeds=" << initialParameters.size()
+            << " processed=" << nSeed << " tracks=" << tracks.size()
+            << " find_ms=" << (_find_ns / 1e6) << " loop_ms=" << _loop_ms
+            << " helix_calls="
+            << (Acts::detail::helixIntersectCallCounter().load() - _hx0)
+            << " helix_fallback="
+            << (Acts::detail::helixIntersectFallbackCounter().load() - _hf0));
 
   // Compute shared hits from all the reconstructed tracks
   if (m_cfg.computeSharedHits) {

@@ -2,7 +2,7 @@
 
 # CommonFramework configuration
 stage: edge_classifier
-model: InteractionGNN
+model: InteractionGNN2  # must match architecture of the checkpoint (IGNN1 checkpoints below need model: InteractionGNN)
 
 # Checkpoint path (optional - if not specified, will use latest checkpoint from stage_dir)
 # Can be absolute path or relative to low_pt_gnn_pipeline directory
@@ -30,18 +30,20 @@ model: InteractionGNN
 #checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/low_pt_gnn_300_mixed_segmented_val_loss=0.0022.ckpt
 
 ## 300 mixed looper SEGMENTED one in one out (1i1o)
-checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/Low_pt_gnn_300_MIXED_1i1o_best_val_loss=0.0007.ckpt
+#checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/Low_pt_gnn_300_MIXED_1i1o_best_val_loss=0.0007.ckpt
 
+
+checkpoint: /data/alice/bkuipers/low_pt_gnn_pipeline/saved_models/geant4/gnn_best_val_loss_val_loss=0.0092.ckpt
 
 # Paths (absolute)
 input_dir: /data/alice/bkuipers/low_pt_gnn_pipeline/data/graph_constructed_latent  # Input graphs (from graph construction stage)
 stage_dir: /data/alice/bkuipers/low_pt_gnn_pipeline/data/gnn_stage  # Output directory (graphs with edge_scores will be saved here)
 
 # Dataset parameters
-data_split: [10000, 0, 0]  # [training, validation, testing] - infer on 100 test events
+data_split: [0, 2, 0]  # [training, validation, testing] - infer on 100 test events
 
 # Inference options
-accelerator: cuda # cpu vs cuda
+accelerator: cpu # cpu vs cuda
 devices: 1
 nodes: 1
 num_workers: [8, 8, 8]  # Workers for [train, val, test] dataloaders during inference
@@ -51,7 +53,7 @@ num_workers: [8, 8, 8]  # Workers for [train, val, test] dataloaders during infe
 undirected: True
 undirected_message_passing: True
 node_features: [hit_r, hit_phi, hit_z]
-node_scales: [1000, 3.14, 500]
+node_scales: [1000, 3.14, 1200]
 # node_features: [hit_r, hit_phi, hit_z, hit_t]
 # node_scales: [1000, 3.14, 500, 2000]
 

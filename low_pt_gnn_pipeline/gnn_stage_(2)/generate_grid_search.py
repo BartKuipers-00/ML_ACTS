@@ -37,15 +37,15 @@ def expand_grid(grid_params):
 
 def create_run_name(config):
     """Generate a descriptive run name from config"""
-    # Key parameters for naming
+    # Key parameters for naming (InteractionGNN2 param names)
     h = config['hidden']
     gi = config['n_graph_iters']
-    nl = config['nb_node_layer']
-    el = config['nb_edge_layer']
+    nl = config['n_node_net_layers']
+    el = config['n_edge_net_layers']
     lr = config['lr']
-    agg = '-'.join(config['aggregation'])
-    h_act = config.get('hidden_activation', 'SiLU')
-    o_act = config.get('output_activation', 'Tanh')
+    agg = config.get('aggr', 'sum')
+    h_act = config.get('hidden_activation', 'ReLU')
+    o_act = config.get('output_activation', 'ReLU')
 
     return f"h{h}_gi{gi}_nl{nl}_el{el}_lr{lr}_agg-{agg}_act-{h_act}-{o_act}"
 

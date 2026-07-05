@@ -16,6 +16,7 @@ Configuration:
 """
 
 import sys
+import argparse
 from pathlib import Path
 import yaml
 
@@ -38,8 +39,13 @@ def main():
     print("="*80)
     print()
     
-    # Load configuration
-    config_path = PIPELINE_ROOT / 'acorn_configs' / 'latent_stage_(1)' / 'convert_csv_to_pyg_sets.yaml'
+    # Load configuration (default: muon config; override with --config for other samples)
+    ap = argparse.ArgumentParser(description="Convert ACTS CSV files to PyG graphs")
+    ap.add_argument('--config', default=None,
+                    help="Path to convert config YAML (default: convert_csv_to_pyg_sets.yaml)")
+    cli_args, _ = ap.parse_known_args()
+    config_path = (Path(cli_args.config).resolve() if cli_args.config
+                   else PIPELINE_ROOT / 'acorn_configs' / 'latent_stage_(1)' / 'convert_csv_to_pyg_sets.yaml')
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
 

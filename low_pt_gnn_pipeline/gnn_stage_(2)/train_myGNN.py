@@ -18,7 +18,7 @@ sys.path.insert(0, str(PIPELINE_ROOT))
 
 from acorn.core.core_utils import get_stage_module
 from acorn.utils.loading_utils import add_variable_name_prefix_in_config
-from acorn.stages.edge_classifier.models.interaction_gnn import InteractionGNN
+from acorn.stages.edge_classifier.models.interaction_gnn import InteractionGNN2
 from acorn.stages.edge_classifier.edge_classifier_stage import GraphDataset
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Dataset
@@ -43,7 +43,7 @@ class BoolEdgeYGraphDataset(GraphDataset):
         return super().preprocess_event(event)
 
 
-class WandbInteractionGNN(InteractionGNN):
+class WandbInteractionGNN(InteractionGNN2):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

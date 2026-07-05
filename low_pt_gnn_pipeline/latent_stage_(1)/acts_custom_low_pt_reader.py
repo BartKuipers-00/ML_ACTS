@@ -124,8 +124,16 @@ class ActsCustomLowPTReader(ActsReader):
         row index of hits.csv before any rows were removed).  clean_loops
         preserves this as the 'simhit_id' column; fall back to pandas row index
         for backwards-compatibility with raw ACTS output.
+
+        If config['geometry_from_csv'] is set (e.g. custom detectors like ALICE 3
+        with no detectors.csv), geometry columns (volume_id/layer_id/module_id) and
+        global positions (global_x/y/z) are taken straight from the measurements CSV
+        instead of being merged/recomputed from self.detector.
         """
-        result = super()._process_measurements(measurements, simhits, simhit_map)
+        if self.config.get("geometry_from_csv", False):
+            result = self._process_measurements_from_csv(measurements, simhits, simhit_map)
+        else:
+            result = super()._process_measurements(measurements, simhits, simhit_map)
 
         # Build simhit_id -> tt / segment_id lookups using the stable SimHitContainer
         # position stored in the 'simhit_id' column (added by clean_loops).
@@ -138,6 +146,25 @@ class ActsCustomLowPTReader(ActsReader):
         result["segment_id"] = result["hit_id"].map(dict(zip(key, simhits["segment_id"])))
 
         return result
+
+    def _process_measurements_from_csv(self, measurements, simhits, simhit_map):
+        """Geometry + global positions already in the measurements CSV (no detectors.csv).
+
+        Mirrors the parent's particle/hit-id join but skips the detector merge and the
+        local->global transform, using the CSV columns directly.
+        """
+        m = measurements.rename(
+            columns={"global_x": "x", "global_y": "y", "global_z": "z"}
+        ).copy()
+        m["hit_id"] = m["measurement_id"].map(
+            dict(zip(simhit_map.measurement_id, simhit_map.hit_id))
+        )
+        if "simhit_id" in simhits.columns:
+            key = simhits["simhit_id"]
+        else:
+            key = simhits.index
+        m["particle_id"] = m["hit_id"].map(dict(zip(key, simhits.particle_id)))
+        return m
 
     def _build_true_tracks(self, hits):
         """
